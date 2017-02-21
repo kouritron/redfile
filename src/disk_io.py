@@ -3,7 +3,7 @@
 
 
 
-class CachingReader:
+class CachedFile:
     """disk reader that has its own internal cache to prevent reading one byte at a time
     from disk. While allowing the user to pretend it is reading one byte at a time. """
 
