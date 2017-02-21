@@ -2,16 +2,15 @@
 # this fixes an issue with PyCharm IDE versions before 2017.1 (apparently 2017.1 fixed it)
 from __future__ import absolute_import
 
+# import os
+# import sys
+# sys.path.insert(0, os.path.abspath('../src'))
+
+
 import os
-import sys
-sys.path.insert(0, os.path.abspath('../src'))
-
-
-import unittest
-
-import estream
-
 import hashlib
+import unittest
+from rfutil import estream
 
 
 
@@ -90,13 +89,20 @@ class TestEscapeStream(unittest.TestCase):
 
         orig_hash = get_file_hash(rand_filename)
 
+        esc_filesz = 0
+        unesc_filesz = 0
+
         es = estream.EscapeStream()
-        es.escape_and_save(rand_filename, rand_filename_esc )
-        es.unescape_and_save(rand_filename_esc, rand_filename_unesc)
+        esc_filesz = es.escape_and_save(rand_filename, rand_filename_esc )
+        unesc_filesz = es.unescape_and_save(rand_filename_esc, rand_filename_unesc)
 
         escaped_then_unescaped = get_file_hash(rand_filename_unesc)
 
         self.assertEqual(orig_hash, escaped_then_unescaped)
+        self.assertTrue(esc_filesz >= unesc_filesz)
+
+        print "esc_filesz: " + str(esc_filesz)
+        print "unesc_filesz: " + str(unesc_filesz)
 
 
     def test_1M(self):

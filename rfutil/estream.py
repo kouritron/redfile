@@ -45,6 +45,12 @@ class EscapeStream:
 
 
     def escape_and_save(self, in_file_name, out_file_name):
+        """ Given a filename as input, read it, escape all occurences of flag byte and save the result
+        on disk to another file.
+        Also return the total number of bytes written to output file.
+        """
+
+        bytes_written = 0
 
         # open in and out files for reading in binary modem and writing in binary mode
         infile = open(in_file_name, "rb")
@@ -75,13 +81,21 @@ class EscapeStream:
             # bytes(escaped_br) returns a str in python 2, and something else (bytes object) in python 3
             # bytes object is not a string, but can be used as string in most places.
             outfile.write(bytes(escaped_br))
+            bytes_written += len(escaped_br)
             src_br = bytearray(infile.read(self.READ_SIZE))
 
         # done with the loop
         outfile.close()
 
-    def unescape_and_save(self, in_file_name, out_file_name):
+        return bytes_written
 
+    def unescape_and_save(self, in_file_name, out_file_name):
+        """ Given a filename as input, read it, un-escape all occurences of escaped flag bytes to recover
+        the original and save the result on disk to another file.
+        Also return the total number of bytes written to output file.
+        """
+
+        bytes_written = 0
         # open in and out files for reading in binary modem and writing in binary mode
         infile = open(in_file_name, "rb")
         outfile = open(out_file_name, "wb")
@@ -127,11 +141,13 @@ class EscapeStream:
             # bytes(escaped_br) returns a str in python 2, and something else (bytes object) in python 3
             # bytes object is not a string, but can be used as string in most places.
             outfile.write(bytes(escaped_br))
+            bytes_written += len(escaped_br)
             src_br = bytearray(infile.read(self.READ_SIZE))
             # print "read " + str(len(src_br)) + " bytes"
 
         # done with the loop
         outfile.close()
+        return bytes_written
 
 
 
