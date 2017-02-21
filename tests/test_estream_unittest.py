@@ -133,7 +133,7 @@ class TestEscapeStream(unittest.TestCase):
 
         self.assertEqual(orig_hash, escaped_then_unescaped)
 
-c
+
     def test_flag_byte_should_not_exist_in_escaped_file(self):
         print " ------------------------------------------------ testing flag byte existence in escaped file"
 
