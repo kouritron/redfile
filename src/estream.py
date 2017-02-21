@@ -89,7 +89,7 @@ class EscapeStream:
         # this is a bit more complicated than escape and save, we have to handle the case where the last
         # byte of one chunk and the first byte of the next chunk have to be processed together.
         src_br = bytearray(infile.read(self.READ_SIZE))
-        print "read " + str(len(src_br)) + " bytes"
+        # print "read " + str(len(src_br)) + " bytes"
 
         last_was_a_discarded_escape = False
 
@@ -119,7 +119,7 @@ class EscapeStream:
                 elif (b != self.ESCAPE_BYTE):
                     escaped_br.append(b)
                 else:
-                    print "found escape byte, will not include it in the output."
+                    # print "found escape byte, will not include it in the output."
                     last_was_a_discarded_escape = True
 
 
@@ -128,7 +128,7 @@ class EscapeStream:
             # bytes object is not a string, but can be used as string in most places.
             outfile.write(bytes(escaped_br))
             src_br = bytearray(infile.read(self.READ_SIZE))
-            print "read " + str(len(src_br)) + " bytes"
+            # print "read " + str(len(src_br)) + " bytes"
 
         # done with the loop
         outfile.close()
