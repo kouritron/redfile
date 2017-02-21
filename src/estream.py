@@ -139,5 +139,8 @@ if __name__ == '__main__':
 
     print "------------------------------"
     es = EscapeStream()
-    es.escape_and_save("../sample_data/test2", "../sample_data/test2_escaped")
-    es.unescape_and_save("../sample_data/test2_escaped", "../sample_data/test2_escaped_unescaped")
+    # es.escape_and_save("../sample_data/test2", "../sample_data/test2.escaped")
+    # es.unescape_and_save("../sample_data/test2.escaped", "../sample_data/test2.escaped.unescaped")
+
+    es.escape_and_save("../sample_data/pic1.jpg", "../sample_data/pic1.jpg.escaped")
+    es.unescape_and_save("../sample_data/pic1.jpg.escaped", "../sample_data/pic1.jpg.escaped.unescaped")

@@ -68,7 +68,7 @@ class TestEscapeStream(unittest.TestCase):
         files = ['1k.rand_bin', '1k.rand_bin.escaped', '1k.rand_bin.escaped.unescaped',
                 '1MB.rand_bin', '1MB.rand_bin.escaped', '1MB.rand_bin.escaped.unescaped',
                 '10MB.rand_bin', '10MB.rand_bin.escaped', '10MB.rand_bin.escaped.unescaped']
-        
+
         for file in files:
             try:
                 os.remove(file)
@@ -133,6 +133,25 @@ class TestEscapeStream(unittest.TestCase):
 
         self.assertEqual(orig_hash, escaped_then_unescaped)
 
+c
+    def test_flag_byte_should_not_exist_in_escaped_file(self):
+        print " ------------------------------------------------ testing flag byte existence in escaped file"
+
+        rand_filename       = '1k.rand_bin'
+        rand_filename_esc   = rand_filename + '.escaped'
+
+        es = estream.EscapeStream()
+        es.escape_and_save(rand_filename, rand_filename_esc)
+
+
+        with open(rand_filename_esc, 'rb') as fin:
+
+            src_br = bytearray(fin.read(es.READ_SIZE))
+            while len(src_br) > 0:
+                for b in src_br:
+                    self.assertNotEqual(b, es.FLAG_BYTE, "flag byte found in escaped file")
+
+                src_br = bytearray(fin.read(es.READ_SIZE))
 
     def test_3(self):
         self.assertTrue(True, "hi")
