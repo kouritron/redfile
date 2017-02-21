@@ -34,7 +34,7 @@ and you should get back the orignial data
 """
 
 class EscapeStream:
-    def __init__(self, in_file_name, out_file_name):
+    def __init__(self):
         # read size in bytes
         self.READ_SIZE = 512
 
@@ -89,6 +89,9 @@ class EscapeStream:
         # this is a bit more complicated than escape and save, we have to handle the case where the last
         # byte of one chunk and the first byte of the next chunk have to be processed together.
         src_br = bytearray(infile.read(self.READ_SIZE))
+        print "read " + str(len(src_br)) + " bytes"
+
+        last_was_a_discarded_escape = False
 
         while len(src_br) > 0:
 
@@ -97,13 +100,35 @@ class EscapeStream:
             escaped_br = bytearray()
 
             for b in src_br:
-                # print b
-                pass
+                #print "idx: " + str(idx)
+
+                if last_was_a_discarded_escape:
+                    # we are reading the byte immediately after esc character
+
+                    # clear this flag so we dont come back here again.
+                    last_was_a_discarded_escape = False
+
+                    if b == self.RPLFLG_BYTE:
+                        escaped_br.append(self.FLAG_BYTE)
+                    elif b == self.ESCAPE_BYTE:
+                        escaped_br.append(self.ESCAPE_BYTE)
+                    else:
+                        print "Warning: Unexpected byte seen. Perhaps source is not a redfile escaped stream."
+                        escaped_br.append(b)
+
+                elif (b != self.ESCAPE_BYTE):
+                    escaped_br.append(b)
+                else:
+                    print "found escape byte, will not include it in the output."
+                    last_was_a_discarded_escape = True
+
+
 
             # bytes(escaped_br) returns a str in python 2, and something else (bytes object) in python 3
             # bytes object is not a string, but can be used as string in most places.
             outfile.write(bytes(escaped_br))
             src_br = bytearray(infile.read(self.READ_SIZE))
+            print "read " + str(len(src_br)) + " bytes"
 
         # done with the loop
         outfile.close()
@@ -115,4 +140,4 @@ if __name__ == '__main__':
     print "------------------------------"
     es = EscapeStream()
     es.escape_and_save("../sample_data/test2", "../sample_data/test2_escaped")
-    #es.unescape_and_save("../sample_data/test2_escaped", "../sample_data/test2_escaped_unescaped")
+    es.unescape_and_save("../sample_data/test2_escaped", "../sample_data/test2_escaped_unescaped")
