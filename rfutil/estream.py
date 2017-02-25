@@ -33,15 +33,22 @@ esc esc       with   esc
 and you should get back the orignial data
 """
 
-class EscapeStream:
-    def __init__(self):
-        # read size in bytes
-        self.READ_SIZE = 512
 
-        # 0x80 == 128   -----  0x81 == 129  ------ 0x82 == 130
-        self.RPLFLG_BYTE = 128
-        self.FLAG_BYTE = 129
-        self.ESCAPE_BYTE = 130
+class EscapeStream:
+
+    # class variables:
+    # read size in bytes
+    READ_SIZE = 512
+
+    # 0x80 == 128   -----  0x81 == 129  ------ 0x82 == 130
+    RPLFLG_BYTE = 128
+    FLAG_BYTE = 129
+    ESCAPE_BYTE = 130
+
+
+#    def __init__(self):
+#        pass
+
 
 
     def escape_and_save(self, in_file_name, out_file_name):
@@ -68,7 +75,9 @@ class EscapeStream:
             escaped_br = bytearray()
 
             for b in src_br:
-                #print b
+                # print b
+                # Note: type(b) is in fact int here.
+
                 if b == self.ESCAPE_BYTE:
                     escaped_br.append(self.ESCAPE_BYTE)
                     escaped_br.append(self.ESCAPE_BYTE)

@@ -5,19 +5,25 @@ import hashlib
 from rfutil import estream
 
 def get_hash(src_bytes):
-    hash_func = hashlib.sha1()
+    hash_func = hashlib.sha256()
     hash_func.update(src_bytes)
-    return hash_func.hexdigest()
 
+    # this will return a string "0f20....."
+    # return hash_func.hexdigest()
+
+    # this is the actual bytes (i.e. (15, 32, ...)) (maybe still as a str object tho)
+    # hash_func.hexdigest().decode('hex') == hash_func.digest()
+    return hash_func.hexdigest()
 
 
 def test_hash():
     print "----------------------------------------------------------------"
-    test1_sum = "0a4d55a8d778e5022fab701977c5d840bbc486d0"
-    test1_str = b'Hello World'
 
-    test2_sum = "648a6a6ffffdaa0badb23b8baf90b6168dd16b3a"
-    test2_str = b'Hello World\n'
+    test22321_str = b'Hello World\n'
+    test1_str = b'\Hello World'
+    test2_str = b'\x00\x00\x00\x00\x00\x00\x00\x00Hello World'
+    # test2 sha256  is  add1cbde5f210aed97cc2bce0699daaec734c88326d43c38d6427c6699e60f7b
+
 
     print get_hash(test1_str)
     print get_hash(test2_str)
@@ -25,13 +31,7 @@ def test_hash():
 
 
 if "__main__" == __name__:
-
-    test_filename = "sample_data/pic1.jpg"
-
-    es = estream.EscapeStream()
-
-    test_filesz =  es.escape_and_save("../sample_data/pic1.jpg", "../sample_data/pic1.jpg.escaped")
-
+    test_hash()
 
 
 
