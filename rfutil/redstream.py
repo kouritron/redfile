@@ -81,6 +81,18 @@ class RedStream:
 
         return packet
 
+    @classmethod
+    def calculate_redundant_offsets_for_packet(cls, packetid, pkt_count):
+
+        offsets = []
+
+        # first the sequential offsets
+        offsets.append(packetid * cls.MAX_PACKET_SIZE * cls.REDUNDANCY_LEVEL)
+
+        # now the reverse sequential offsets
+        offsets.append( ((pkt_count - packetid) * cls.REDUNDANCY_LEVEL * cls.MAX_PACKET_SIZE) - cls.MAX_PACKET_SIZE)
+
+        return offsets
 
 
 
@@ -141,20 +153,12 @@ class RedStream:
                 print "Found short packet. len: " + str(len(packet)) + " I will pad this with 0s"
                 packet.extend( [0 for i in xrange(self.MAX_PACKET_SIZE - len(packet)) ] )
 
+            offsets = self.calculate_redundant_offsets_for_packet(packets_written, total_packet_count)
 
-            copy1_offset = packets_written * self.MAX_PACKET_SIZE * self.REDUNDANCY_LEVEL
-            outfile.seek(copy1_offset)
-            outfile.write(bytes(packet))
-
-            print "writing packet# " + str(packets_written) + " redundant copy1 offset is: " + str(copy1_offset)
-
-            # write inverse sequential copy now.
-            copy2_offset = ((total_packet_count - packets_written) * self.REDUNDANCY_LEVEL * self.MAX_PACKET_SIZE) \
-                           - self.MAX_PACKET_SIZE
-
-            outfile.seek(copy2_offset)
-            outfile.write(bytes(packet))
-            print "writing packet# " + str(packets_written) + " redundant copy2 offset is: " + str(copy2_offset)
+            for i in range(len(offsets)):
+                outfile.seek(offsets[i])
+                outfile.write(bytes(packet))
+                print "writing packet# " + str(packets_written) + " copy #" + str(i) + " offset is: " + str(offsets[i])
 
 
             packets_written += 1
@@ -182,4 +186,4 @@ if __name__ == '__main__':
     rs.redundantize_and_save("../sample_data/test3", "../sample_data/test3.redfile")
     rs.redundantize_and_save("../sample_data/test4", "../sample_data/test4.redfile")
     rs.redundantize_and_save("../sample_data/test5", "../sample_data/test5.redfile")
-    #rs.redundantize_and_save("../sample_data/pic1.jpg", "../sample_data/pic1.jpg.redfile")
+    rs.redundantize_and_save("../sample_data/pic1.jpg", "../sample_data/pic1.jpg.redfile")
