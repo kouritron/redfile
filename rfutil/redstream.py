@@ -99,7 +99,7 @@ class RedArkiver:
 
         return bytes(packet_mutable)
 
-    def _calculate_redundant_offsets_for_packet(self, packetid, pkt_count):
+    def _get_offsets_for_packet_algo1(self, packetid, pkt_count):
 
         offsets = []
 
@@ -142,7 +142,7 @@ class RedArkiver:
             # // is unconditionally the integer division with truncate operator.
             infile_size_rounded_up = ((infile_size // self.READ_SIZE) + 1) * self.READ_SIZE
 
-        print "source file after getting packet size aligned is: " + str(infile_size_rounded_up) + " bytes"
+        #print "source file after getting packet size aligned is: " + str(infile_size_rounded_up) + " bytes"
 
         total_packet_count = infile_size_rounded_up // self.READ_SIZE
         print "i believe i will need " + str(total_packet_count) + " packets in total"
@@ -174,7 +174,7 @@ class RedArkiver:
                 packet_mutable.extend( [0 for i in xrange(self.MAX_PACKET_SIZE - len(packet)) ] )
                 packet = bytes(packet_mutable)
 
-            offsets = self._calculate_redundant_offsets_for_packet(packets_written, total_packet_count)
+            offsets = self._get_offsets_for_packet_algo1(packets_written, total_packet_count)
 
             for i in range(len(offsets)):
                 outfile.seek(offsets[i])
@@ -189,8 +189,9 @@ class RedArkiver:
         outfile.flush()
 
         outfile.seek(0, 2)
-        print "Done. new size is: " + str(outfile.tell()) + " total packets written: " + str(packets_written)
-        print "########"
+        print "Redfile created. replica count: " + str(self.REPLICA_COUNT)
+        print "final size: " + str(outfile.tell()) + " -- total packets written: " + str(packets_written)
+        print "########################################################################################################"
 
         # done with the loop
         outfile.close()
@@ -226,32 +227,32 @@ class RedUnarkiver:
         print "recovering original file from red arkive. output filename: " + out_filename
 
 
-        # the len field is unsigned 16 int, hence max packet size is 2^16
-
         potential_packet_start_offset = 0
-        readbuf_immutable = bytes(self.infile.read(65536))
-        potential_packet_start_offset += 1
         self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
+        readbuf_immutable = bytes(self.infile.read(6))
 
-        while len(readbuf_immutable) > len(RedArkiver.FLAG_SEQ):
+        while len(readbuf_immutable) >= len(RedArkiver.FLAG_SEQ):
             # we got something process it.
+            advance_len = -1
 
             if RedArkiver.FLAG_SEQ == readbuf_immutable[0: len(RedArkiver.FLAG_SEQ)]:
+                # the len field is unsigned 16 int, hence max packet size is 2^16
+                self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
+                readbuf_immutable = bytes(self.infile.read(66000))
                 # suspect stage is complete in our suspect and confirm framing scheme.
                 advance_len = self._check_for_valid_packet_and_process_if_found(readbuf_immutable)
 
-                if advance_len > 0:
-                    # advance_len > 0 means we successfully processed a packet,
-                    # dont advance by one byte in this case (purely for efficiency reasons, not correctness),
-                    # advance by advance_len many bytes (but take out the +1 we have already advanced)
-                    potential_packet_start_offset += advance_len - 1
-                    self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
+            if advance_len > 0:
+                # we successfully processed a packet, advance by advance_len many bytes
+                potential_packet_start_offset += advance_len
+            else:
+                # meaning no packet was found, advance our search by just one byte
+                potential_packet_start_offset += 1
 
 
             # advance into the file.
-            readbuf_immutable = bytes(self.infile.read(65536))
-            potential_packet_start_offset += 1
             self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
+            readbuf_immutable = bytes(self.infile.read(6))
 
 
 
@@ -338,22 +339,21 @@ if __name__ == '__main__':
     files = []
     files.append(("../sample_data/test1", 2))
     files.append(("../sample_data/test2", 2))
-    files.append(("../sample_data/test3", 2))
-    files.append(("../sample_data/test4", 2))
-    files.append(("../sample_data/test5", 2))
+    #files.append(("../sample_data/test3", 2))
+    #files.append(("../sample_data/test4", 2))
+    #files.append(("../sample_data/test5", 2))
     files.append(("../sample_data/pic1.jpg", 2))
     files.append(("../sample_data/pic2.jpg", 2))
     files.append(("../sample_data/pic3.png", 2))
 
 
     for fname, count in files:
-        # ra = RedArkiver(src_filename=fname, replica_count=count)
-        # ra.redundantize_and_save()
+        ra = RedArkiver(src_filename=fname, replica_count=count)
+        ra.redundantize_and_save()
         ru = RedUnarkiver(src_filename=fname + ".redfile")
         ru.recover_and_save()
 
 
-    #RedUnarkiver(src_filename="../sample_data/test1.redfile").recover_and_save()
     #clean_up_sample_dir(files)
 
 
