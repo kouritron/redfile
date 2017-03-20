@@ -6,18 +6,34 @@
 
 import hashlib
 import struct
+import os
+
+
+_REPLICA_COUNT_DEFAULT = 3
+_REPLICA_COUNT_MIN = 2
+
+
+def _get_hash(src_bytes):
+    hash_func = hashlib.sha256()
+    hash_func.update(src_bytes)
+
+    # this will return a string "0f20....."
+    # return hash_func.hexdigest()
+
+    # this is the actual bytes (as ints between [0,255] ) (maybe still as a str object tho in py 2 at least)
+    # hash_func.hexdigest().decode('hex') == hash_func.digest()
+
+    # digest() returns a <type 'str'> in python 2.7, and a <class 'bytes'> in python 3.x
+    return hash_func.digest()
 
 
 
-
-
-
-class RedStream:
+class RedArkiver:
 
     # 129 == 0x81
-    FLAG_BYTE = 129
+    # FLAG_BYTE = 129
 
-    REDUNDANCY_LEVEL = 4
+    FLAG_SEQ = b'\x81\x81\x81\x81\x81\x81'
 
     # class variables:
     # presumably the user will set this to something like 512 or 4k as the device min block size
@@ -31,87 +47,91 @@ class RedStream:
     # 512 - 48 == 464
     READ_SIZE = MAX_PACKET_SIZE - HEADER_SIZE
 
-    #    def __init__(self):
-    #        pass
+    # careful with argument defaults, they are evaluated once at function definition, not every time its called
+    # good practice to avoid using mutable objects for argument defaults.
+    def __init__(self, src_filename, replica_count=None):
+
+        if replica_count is None:
+            self.REPLICA_COUNT = _REPLICA_COUNT_DEFAULT
+        elif (int == type(replica_count) and replica_count >= _REPLICA_COUNT_MIN):
+            self.REPLICA_COUNT = replica_count
+        else:
+            raise ValueError('replica_count must be an int and >= ' + str(_REPLICA_COUNT_MIN))
+
+        # check if such a file exists or not. use these:
+        # os.path.isfile    returns true if a file (or link to file is there)
+        # os.path.isdir     returns true if a directory (or link to directory is there)
+        # os.path.exists    returns true if either file or directory exists (or sym links)
+        if os.path.isfile(src_filename):
+            self.src_filename = src_filename
+        else:
+            raise ValueError('no such file with the supplied filename was found')
+
+        # TODO its probably better to open and save file size here already.
 
 
-    # static methods are not bound to anything, not even the class
-    @staticmethod
-    def get_hash(src_bytes):
-        hash_func = hashlib.sha256()
-        hash_func.update(src_bytes)
-
-        # this will return a string "0f20....."
-        # return hash_func.hexdigest()
-
-        # this is the actual bytes (as ints between [0,255] ) (maybe still as a str object tho in py 2 at least)
-        # hash_func.hexdigest().decode('hex') == hash_func.digest()
-        return hash_func.digest()
-
-
-    # class methods are bound to the class, static methods are not bound to anything. if u need to reference
-    # the class name, i.e. RedStream.FLAG_BYTE use this so we dont have to hard code the class name.
-    @classmethod
-    def make_packet(cls, src_br, source_offset):
+    def _make_packet(self, src_br, source_offset):
         # create a bytearray for the redundant stream, byte array is mutable ( [] syntax works fine )
-        packet = bytearray()
-        packet_after_cksum = bytearray()
+        packet_mutable = bytearray()
+        packet_after_cksum_mutable = bytearray()
+
 
         # header starts with flag bytes
-        packet.append(cls.FLAG_BYTE)
-        packet.append(cls.FLAG_BYTE)
-        packet.append(cls.FLAG_BYTE)
-        packet.append(cls.FLAG_BYTE)
-        packet.append(cls.FLAG_BYTE)
-        packet.append(cls.FLAG_BYTE)
+        packet_mutable.extend(self.FLAG_SEQ)
+
 
         # next is len field, 2 bytes unsigned, big endian. len of the overall packet (header + payload)
-        packet.extend(struct.pack('!H', len(src_br) + cls.HEADER_SIZE))
+        packet_mutable.extend(struct.pack('!H', len(src_br) + self.HEADER_SIZE))
 
         # next is hash of the rest of the packet, this will be calculated later.
 
         # then we have a source byte offset as an unsigned 8 byte int.
-        packet_after_cksum.extend(struct.pack('!Q', source_offset))
+        packet_after_cksum_mutable.extend(struct.pack('!Q', source_offset))
 
         # add the actual source
-        packet_after_cksum.extend(src_br)
+        packet_after_cksum_mutable.extend(src_br)
 
-        packet.extend(cls.get_hash(packet_after_cksum))
-        packet.extend(packet_after_cksum)
+        # done constructing the after cksum part, freeze it.
+        packet_after_cksum_immutable = bytes(packet_after_cksum_mutable)
 
-        return packet
+        packet_mutable.extend(_get_hash(packet_after_cksum_immutable))
+        packet_mutable.extend(packet_after_cksum_immutable)
 
-    @classmethod
-    def calculate_redundant_offsets_for_packet(cls, packetid, pkt_count):
+        return bytes(packet_mutable)
+
+    def _calculate_redundant_offsets_for_packet(self, packetid, pkt_count):
 
         offsets = []
 
         # first the sequential offsets
-        offsets.append(packetid * cls.MAX_PACKET_SIZE * cls.REDUNDANCY_LEVEL)
+        offsets.append(packetid * self.MAX_PACKET_SIZE * self.REPLICA_COUNT)
 
         # now the reverse sequential offsets
-        offsets.append( ((pkt_count - packetid) * cls.REDUNDANCY_LEVEL * cls.MAX_PACKET_SIZE) - cls.MAX_PACKET_SIZE)
+        offsets.append( ((pkt_count - packetid) * self.REPLICA_COUNT * self.MAX_PACKET_SIZE) - self.MAX_PACKET_SIZE)
 
         return offsets
 
 
 
-    def redundantize_and_save(self, in_file_name, out_file_name):
+    def redundantize_and_save(self, out_filename=None):
         """
         """
 
+        if out_filename is None:
+            out_filename = str(self.src_filename) + ".redfile"
+
         print "--------------------------------------------------------------------------------------------------------"
-        print "redundantize_and_save called on input file: " + in_file_name
+        print "creating redudant file. output file name: " + out_filename
 
 
         # open in and out files for reading in binary modem and writing in binary mode
-        infile = open(in_file_name, "rb")
-        outfile = open(out_file_name, "wb")
+        infile = open(self.src_filename, "rb")
+        outfile = open(out_filename, "wb")
 
         # find src file size first.
-        infile.seek(0, 2)
+        infile.seek(0, os.SEEK_END)
         infile_size = infile.tell()
-        infile.seek(0, 0)
+        infile.seek(0, os.SEEK_SET)
 
         print "source file appears to be: " + str(infile_size) + " bytes"
         infile_size_rounded_up = 0
@@ -127,6 +147,7 @@ class RedStream:
         total_packet_count = infile_size_rounded_up // self.READ_SIZE
         print "i believe i will need " + str(total_packet_count) + " packets in total"
 
+        # this offset indicates where in the source file current payload was read from.
         source_offset = 0
         packets_written = 0
 
@@ -134,31 +155,31 @@ class RedStream:
         src_br = bytearray(infile.read(self.READ_SIZE))
 
 
-        # this offset indicates where in the source file current payload was read from.
-        # this is more like bytes read from the source file before current packet.
-
         #while len(src_br) == self.READ_SIZE:
         while len(src_br) > 0:
 
-            packet = self.make_packet(src_br, source_offset)
+            packet = self._make_packet(src_br, source_offset)
             source_offset += len(src_br)
 
             # now calculate how many times do we write this packet and where in output it should go.
             # dont worry about bad disk io pattern, we can implement a decent cached disk io later if the built in
             # buffering did not perform well.
 
-            # this particular randomizer needs to know the output filesize as part of its calculations
+            # this particular output layout needs to know the output filesize as part of its calculations
             # and it thus needs packets all to be the same size (the un-arkiver wont need this assumption tho)
+            # note the padding isnt part of the packet. its just dead space before the next packet begins.
             if len(packet) < self.MAX_PACKET_SIZE:
                 print "Found short packet. len: " + str(len(packet)) + " I will pad this with 0s"
-                packet.extend( [0 for i in xrange(self.MAX_PACKET_SIZE - len(packet)) ] )
+                packet_mutable = bytearray(packet)
+                packet_mutable.extend( [0 for i in xrange(self.MAX_PACKET_SIZE - len(packet)) ] )
+                packet = bytes(packet_mutable)
 
-            offsets = self.calculate_redundant_offsets_for_packet(packets_written, total_packet_count)
+            offsets = self._calculate_redundant_offsets_for_packet(packets_written, total_packet_count)
 
             for i in range(len(offsets)):
                 outfile.seek(offsets[i])
-                outfile.write(bytes(packet))
-                print "writing packet# " + str(packets_written) + " copy #" + str(i) + " offset is: " + str(offsets[i])
+                outfile.write(packet)
+                #print "writing packet# " + str(packets_written) + " copy #" + str(i) + " offset is: " + str(offsets[i])
 
 
             packets_written += 1
@@ -175,15 +196,164 @@ class RedStream:
         outfile.close()
 
 
+class RedUnarkiver:
+
+    def __init__(self, src_filename):
+
+        # check if such a file exists or not. use these:
+        # os.path.isfile    returns true if a file (or link to file is there)
+        # os.path.isdir     returns true if a directory (or link to directory is there)
+        # os.path.exists    returns true if either file or directory exists (or sym links)
+        if os.path.isfile(src_filename):
+            self.src_filename = src_filename
+        else:
+            raise ValueError('no such file with the supplied filename was found')
+
+        # its possible that the file was on disk when the previous lines ran and no longer on disk now.
+        # TODO maybe the above check is unnecessary, i kept in case we want to handle directories differently.
+        self.infile = open(src_filename, "rb")
+
+    def recover_and_save(self, out_filename=None):
+        """
+        """
+
+        if out_filename is None:
+            out_filename = str(self.src_filename) + ".recovered"
+
+        self.outfile = open(out_filename, "wb")
+
+        print "--------------------------------------------------------------------------------------------------------"
+        print "recovering original file from red arkive. output filename: " + out_filename
+
+
+        # the len field is unsigned 16 int, hence max packet size is 2^16
+
+        potential_packet_start_offset = 0
+        readbuf_immutable = bytes(self.infile.read(65536))
+        potential_packet_start_offset += 1
+        self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
+
+        while len(readbuf_immutable) > len(RedArkiver.FLAG_SEQ):
+            # we got something process it.
+
+            if RedArkiver.FLAG_SEQ == readbuf_immutable[0: len(RedArkiver.FLAG_SEQ)]:
+                # suspect stage is complete in our suspect and confirm framing scheme.
+                advance_len = self._check_for_valid_packet_and_process_if_found(readbuf_immutable)
+
+                if advance_len > 0:
+                    # advance_len > 0 means we successfully processed a packet,
+                    # dont advance by one byte in this case (purely for efficiency reasons, not correctness),
+                    # advance by advance_len many bytes (but take out the +1 we have already advanced)
+                    potential_packet_start_offset += advance_len - 1
+                    self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
+
+
+            # advance into the file.
+            readbuf_immutable = bytes(self.infile.read(65536))
+            potential_packet_start_offset += 1
+            self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
+
+
+
+
+
+
+
+    def _check_for_valid_packet_and_process_if_found(self, possible_packet):
+        """ Check if the supplied buffer containes a valid packet at the very beginning if so process it
+          and return the number of bytes that got successfully processed. else return -1
+          """
+
+        # its not a valid packet, if i got less than a header size bytes
+        if len(possible_packet) <= RedArkiver.HEADER_SIZE:
+            return -1
+
+        else:
+
+            # we got something to process.
+            # if this is a real packet. it should have these items in it (in order):
+            # Field1: 6 bytes flag_seq
+            # Field2: 2 bytes len field, (unsigned network byte order) (len of header and payload)
+            # Field3: 32 bytes sha256 sum
+            # Field4: (after cksum) source offset -- index into the original source file where data
+            #         was read from, 8 bytes unsigned network order
+            # Field5: (after cksum) source data
+            # note that packet payload is field 4 and 5 combined.
+
+            field1_flag_seq = possible_packet[0:6]
+            field2_len = struct.unpack("!H", possible_packet[6: 8])[0]
+            field3_cksum = possible_packet[8: 40]
+
+            # its not a valid packet, if it dont begin with flag sequence.
+            if field1_flag_seq != RedArkiver.FLAG_SEQ:
+                print ">>>>>>>>>>> not valid because it doesnt start with flag seq. why was i called then??? "
+                return -1
+
+            # its not a valid packet, if i have fewer bytes than the len field seems to indicate.
+            if len(possible_packet) < field2_len:
+                print "not valid packet, because i seem to have fewer bytes than the len field says."
+                print "I got: " + str(len(possible_packet)) + " len_field says: " + str(field2_len)
+                return -1
+
+            # if we haven't returned False we can say this.
+            field4_source_offset = struct.unpack("!Q", possible_packet[40:48])[0]
+            field5_source_data = possible_packet[48:field2_len]
+
+
+            # if cksum confirms this packet's identity save its data at the offset it indicates.
+            if bytes(field3_cksum) == bytes(_get_hash(possible_packet[40:field2_len])):
+                self.outfile.seek(field4_source_offset)
+                self.outfile.write(field5_source_data)
+                # TODO save somewhere the fact that this chunk was successfully recovered.
+                # so we can do plots and shit
+
+                return field2_len
+            else:
+                # hash failed
+                return -1
+
+
+
+
+
+def clean_up_sample_dir(orig_files):
+
+    temp_files = []
+
+    for fname, ignore in orig_files:
+        temp_files.append(fname + ".redfile")
+        temp_files.append(fname + ".redfile.recovered")
+
+    for file in temp_files:
+        try:
+            os.remove(file)
+        except OSError:
+            pass
+
+
+
 
 if __name__ == '__main__':
 
+    files = []
+    files.append(("../sample_data/test1", 2))
+    files.append(("../sample_data/test2", 2))
+    files.append(("../sample_data/test3", 2))
+    files.append(("../sample_data/test4", 2))
+    files.append(("../sample_data/test5", 2))
+    files.append(("../sample_data/pic1.jpg", 2))
+    files.append(("../sample_data/pic2.jpg", 2))
+    files.append(("../sample_data/pic3.png", 2))
 
-    rs = RedStream()
 
-    rs.redundantize_and_save("../sample_data/test1", "../sample_data/test1.redfile")
-    rs.redundantize_and_save("../sample_data/test2", "../sample_data/test2.redfile")
-    rs.redundantize_and_save("../sample_data/test3", "../sample_data/test3.redfile")
-    rs.redundantize_and_save("../sample_data/test4", "../sample_data/test4.redfile")
-    rs.redundantize_and_save("../sample_data/test5", "../sample_data/test5.redfile")
-    rs.redundantize_and_save("../sample_data/pic1.jpg", "../sample_data/pic1.jpg.redfile")
+    for fname, count in files:
+        # ra = RedArkiver(src_filename=fname, replica_count=count)
+        # ra.redundantize_and_save()
+        ru = RedUnarkiver(src_filename=fname + ".redfile")
+        ru.recover_and_save()
+
+
+    #RedUnarkiver(src_filename="../sample_data/test1.redfile").recover_and_save()
+    #clean_up_sample_dir(files)
+
+
