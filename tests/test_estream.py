@@ -1,9 +1,10 @@
 
 
 
+# if you got rfutil module not found error, uncomment this. PyCharm IDE does not need it.
 # import os
 # import sys
-# sys.path.insert(0, os.path.abspath('../src'))
+# sys.path.insert(0, os.path.abspath('../'))
 
 
 import os

@@ -1,6 +1,12 @@
 
 
 
+# if you got rfutil module not found error, uncomment this. PyCharm IDE does not need it.
+# import os
+# import sys
+# sys.path.insert(0, os.path.abspath('../'))
+
+
 import unittest
 from rfutil.layoutmanager import *
 
@@ -45,6 +51,7 @@ class TestLayoutManager(unittest.TestCase):
         layout_managers.append(SequentialLayoutManager(fs, rc, tpc, bfn))
         layout_managers.append(SequentialInterleavedLayoutManager(fs, rc, tpc, bfn))
         layout_managers.append(SequentialInterleavedDistributedBeginningsLayoutManager(fs, rc, tpc, bfn))
+        layout_managers.append(RandomLayoutManager(fs, rc, tpc, bfn))
 
         # every returned should be strictly less than this
         max_offset = (fs * rc * tpc) + (bfn * fs) + 1
@@ -69,6 +76,7 @@ class TestLayoutManager(unittest.TestCase):
         layout_managers.append(SequentialLayoutManager(fs, rc, tpc, bfn))
         layout_managers.append(SequentialInterleavedLayoutManager(fs, rc, tpc, bfn))
         layout_managers.append(SequentialInterleavedDistributedBeginningsLayoutManager(fs, rc, tpc, bfn))
+        layout_managers.append(RandomLayoutManager(fs, rc, tpc, bfn))
 
 
         for layout_manager in layout_managers:
@@ -98,13 +106,14 @@ class TestLayoutManager(unittest.TestCase):
         layout_managers.append(SequentialLayoutManager(fs, rc, tpc, bfn))
         layout_managers.append(SequentialInterleavedLayoutManager(fs, rc, tpc, bfn))
         layout_managers.append(SequentialInterleavedDistributedBeginningsLayoutManager(fs, rc, tpc, bfn))
+        layout_managers.append(RandomLayoutManager(fs, rc, tpc, bfn))
 
 
         for layout_manager in layout_managers:
             for pid in xrange(0, tpc):
                 offsets = layout_manager.get_page_to_bytes_mappings(pid)
                 for offset in offsets:
-                    print offset
+                    #print offset
                     self.assertTrue(0 == (offset % fs), "offsets are not frame aligned")
 
 

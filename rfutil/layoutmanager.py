@@ -13,6 +13,7 @@
 
 
 import abc
+import random
 
 
 class LayoutManager(object):
@@ -128,8 +129,70 @@ class SequentialInterleavedDistributedBeginningsLayoutManager(LayoutManager):
         return frame_numbers
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# I __DO NOT__ recommend using this. the worst case for random is really bad. its the case that all critical
+# replicas get clustered in one place so there is effectively one copy of them. We don't to randomize replica locations
+# we just need to make sure they are well distributed. (meaning each replica is as far from its copies as possible)
+# also not recommended for large files because it takes up too much memory. (it has to keep track of what it has
+# allocated so far)
+class RandomLayoutManager(LayoutManager):
 
-def test_1():
+    def __init__(self, frame_size, replica_count, total_page_count, base_frame_num=0):
+        super(RandomLayoutManager, self).__init__(frame_size, replica_count, total_page_count, base_frame_num)
+
+        frame_nums = list(range(base_frame_num, base_frame_num + (replica_count * total_page_count)))
+
+        # print str(frame_nums)
+        # print "last frame offset in bytes: " + str(frame_nums[-1] * frame_size)
+
+        random.shuffle(frame_nums)
+
+        frame_nums_grouped_by_pid = []
+
+        for i in range(0, len(frame_nums)):
+            if (0 == i % replica_count):
+                frame_nums_grouped_by_pid.append([])
+            frame_nums_grouped_by_pid[-1].append(frame_nums[i])
+
+        self.randomized_frame_nums_grouped_by_pid = frame_nums_grouped_by_pid
+
+        # print str(frame_nums_grouped_by_pid)
+
+    def get_page_to_frame_mappings(self, pageid):
+
+        assert isinstance(pageid, int), "wrong type of id supplied."
+
+        return self.randomized_frame_nums_grouped_by_pid[pageid]
+
+
+def debug_run3():
+    fs = 8
+    rc = 2
+    tpc = 8
+    bfn = 0
+    fmt_str = ""
+
+    for col in range(0, rc):
+        fmt_str += "{:>12}"
+
+    print "------------------------------------------- sequential  "
+
+    header_items = ["replica" + str(replica) for replica in range(0, rc)]
+    print "        " + fmt_str.format(*header_items)
+
+    layout_mgr = RandomLayoutManager(frame_size=fs, replica_count=rc, total_page_count=tpc, base_frame_num=bfn)
+    for pid in range(0, tpc):
+        print "page " + str(pid) + "  " + fmt_str.format(*layout_mgr.get_page_to_bytes_mappings(pid))
+
+
+
+def debug_run1():
 
     fs = 8
     rc = 4
@@ -172,7 +235,7 @@ def test_1():
         print "page " + str(pid) + "  " + fmt_str.format(*layout_mgr.get_page_to_bytes_mappings(pid))
 
 
-def test_2():
+def debug_run2():
     fs = 8
     rc = 2
     tpc = 4
@@ -190,8 +253,7 @@ def test_2():
 
 
 if "__main__" == __name__:
-
-    test_1()
+    debug_run3()
 
 
 
