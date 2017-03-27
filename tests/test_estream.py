@@ -1,6 +1,5 @@
 
-# this fixes an issue with PyCharm IDE versions before 2017.1 (apparently 2017.1 fixed it)
-from __future__ import absolute_import
+
 
 # import os
 # import sys

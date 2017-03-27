@@ -56,6 +56,10 @@ class LayoutManager(object):
 # ----------------------------------------------------------------------------------------------------------------------
 class SequentialLayoutManager(LayoutManager):
 
+    def sadassadget_page_to_frame_mappings(self, pageid):
+        return [3 for i in range(0, self.replica_count -1)]
+
+
     def get_page_to_frame_mappings(self, pageid):
 
         assert isinstance(pageid, int), "wrong type of id supplied."

@@ -1,6 +1,4 @@
 
-# this fixes an issue with PyCharm IDE versions before 2017.1 (apparently 2017.1 fixed it)
-from __future__ import absolute_import
 
 
 import unittest
@@ -34,19 +32,80 @@ class TestLayoutManager(unittest.TestCase):
         pass
 
 
-    def test_1(self):
 
-        print "testing"
-        seq_mgr = SequentialLayoutManager()
+    def test_no_crazy_range(self):
+
+        # frame size, replica count, total page count, base frame number
+        fs = 256
+        rc = 4
+        tpc = 100
+        bfn = 0
+
+        layout_managers = []
+        layout_managers.append(SequentialLayoutManager(fs, rc, tpc, bfn))
+        layout_managers.append(SequentialInterleavedLayoutManager(fs, rc, tpc, bfn))
+        layout_managers.append(SequentialInterleavedDistributedBeginningsLayoutManager(fs, rc, tpc, bfn))
+
+        # every returned should be strictly less than this
+        max_offset = (fs * rc * tpc) + (bfn * fs) + 1
+
+        for layout_manager in layout_managers:
+            for pid in xrange(0, tpc):
+                offsets = layout_manager.get_page_to_bytes_mappings(pid)
+
+                for offset in offsets:
+                    self.assertTrue(offset < max_offset)
+
+
+    def test_enough_distinct_offsets_are_returned(self):
+
+        # frame size, replica count, total page count, base frame number
+        fs = 256
+        rc = 4
+        tpc = 100
+        bfn = 0
+
+        layout_managers = []
+        layout_managers.append(SequentialLayoutManager(fs, rc, tpc, bfn))
+        layout_managers.append(SequentialInterleavedLayoutManager(fs, rc, tpc, bfn))
+        layout_managers.append(SequentialInterleavedDistributedBeginningsLayoutManager(fs, rc, tpc, bfn))
+
+
+        for layout_manager in layout_managers:
+
+            # make sure offsets are not re-used.
+            used_offsets = set()
+
+            for pid in xrange(0, tpc):
+                offsets = layout_manager.get_page_to_bytes_mappings(pid)
+
+                self.assertTrue( rc == len(offsets), "was expecting replica count many offsets" )
+
+                for offset in offsets:
+                    self.assertNotIn(offset, used_offsets, "offset used more than once.")
+                    used_offsets.add(offset)
 
 
 
+    def test_returned_offsets_are_frame_aligned(self):
+        # frame size, replica count, total page count, base frame number
+        fs = 256
+        rc = 4
+        tpc = 100
+        bfn = 0
 
-## TODO: write these tests:
-# for loop over 100 packet ids and make sure each page id gets replica count many offsets.
-# make sure offsets are never re-used.
-# make sure max offset isnt much later than total_size * replica count.
-# make sure returned offsets are multiples of frame size (assuming base num was a multiple, otherwise take that out 1st)
+        layout_managers = []
+        layout_managers.append(SequentialLayoutManager(fs, rc, tpc, bfn))
+        layout_managers.append(SequentialInterleavedLayoutManager(fs, rc, tpc, bfn))
+        layout_managers.append(SequentialInterleavedDistributedBeginningsLayoutManager(fs, rc, tpc, bfn))
+
+
+        for layout_manager in layout_managers:
+            for pid in xrange(0, tpc):
+                offsets = layout_manager.get_page_to_bytes_mappings(pid)
+                for offset in offsets:
+                    print offset
+                    self.assertTrue(0 == (offset % fs), "offsets are not frame aligned")
 
 
 
