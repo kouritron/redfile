@@ -313,7 +313,7 @@ def clean_up_sample_dir(orig_files):
 
     temp_files = []
 
-    for fname, ignore in orig_files:
+    for fname in orig_files:
         temp_files.append(fname + ".redfile")
         temp_files.append(fname + ".redfile.recovered")
 
@@ -328,24 +328,27 @@ def clean_up_sample_dir(orig_files):
 
 if __name__ == '__main__':
 
+    base_dir = "../tests/sample_files/"
+
     files = []
-    files.append(("../sample_data/test1", 2))
-    files.append(("../sample_data/test2", 2))
-    #files.append(("../sample_data/test3", 2))
-    #files.append(("../sample_data/test4", 2))
-    #files.append(("../sample_data/test5", 2))
-    files.append(("../sample_data/pic1.jpg", 2))
-    files.append(("../sample_data/pic2.jpg", 2))
-    files.append(("../sample_data/pic3.png", 2))
+    files.append(("test1", 2))
+    files.append(("test2", 2))
+    #files.append(("test3", 2))
+    #files.append(("test4", 2))
+    #files.append(("test5", 2))
+    files.append(("pic1.jpg", 3))
+    files.append(("pic2.jpg", 2))
+    files.append(("pic3.png", 2))
 
 
     for fname, count in files:
-        ra = RedArkiver(src_filename=fname, replica_count=count)
+        fname_full = base_dir + fname
+        ra = RedArkiver(src_filename=fname_full, replica_count=count)
         ra.redundantize_and_save()
-        ru = RedUnarkiver(src_filename=fname + ".redfile")
+        ru = RedUnarkiver(src_filename=fname_full + ".redfile")
         ru.recover_and_save()
 
 
-    #clean_up_sample_dir(files)
+    #clean_up_sample_dir( [base_dir + fname   for fname, ignore in files ]  )
 
 

@@ -8,10 +8,10 @@
 .swp.*
 .goutputstream-*
 
-ignoreme/
-sample_data/
-
 *.rand_bin
+*.redfile
+*.redfile.recovered
+
 
 ###############################################################################
 ############################################################### Compiled source
