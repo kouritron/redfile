@@ -135,19 +135,19 @@ def test_1():
     header_items = ["replica" + str(replica) for replica in range(0, rc)]
     print "        " + fmt_str.format(*header_items)
 
-    seq_mgr = SequentialLayoutManager(frame_size=fs, replica_count=rc, total_page_count=tpc, base_frame_num=bfn)
+    layout_mgr = SequentialLayoutManager(frame_size=fs, replica_count=rc, total_page_count=tpc, base_frame_num=bfn)
     for pid in range(0, tpc):
-        print "page " + str(pid) + "  " + fmt_str.format(*seq_mgr.get_page_to_bytes_mappings(pid))
+        print "page " + str(pid) + "  " + fmt_str.format(*layout_mgr.get_page_to_bytes_mappings(pid))
 
     print "------------------------------------------- seq interleaved "
 
     header_items = ["replica" + str(replica) for replica in range(0, rc)]
     print "        " + fmt_str.format(*header_items)
 
-    seq_mgr = SequentialInterleavedLayoutManager(frame_size=fs, replica_count=rc, total_page_count=tpc,
+    layout_mgr = SequentialInterleavedLayoutManager(frame_size=fs, replica_count=rc, total_page_count=tpc,
                                                  base_frame_num=bfn)
     for pid in range(0, tpc):
-        print "page " + str(pid) + "  " + fmt_str.format(*seq_mgr.get_page_to_bytes_mappings(pid))
+        print "page " + str(pid) + "  " + fmt_str.format(*layout_mgr.get_page_to_bytes_mappings(pid))
 
 
     print "------------------------------------------- seq interleaved dist. beginnings"
@@ -155,10 +155,10 @@ def test_1():
     header_items = ["replica" + str(replica) for replica in range(0, rc)]
     print "        " + fmt_str.format(*header_items)
 
-    seq_mgr = SequentialInterleavedDistributedBeginningsLayoutManager(frame_size=fs, replica_count=rc,
+    layout_mgr = SequentialInterleavedDistributedBeginningsLayoutManager(frame_size=fs, replica_count=rc,
                                                                       total_page_count=tpc, base_frame_num=bfn)
     for pid in range(0, tpc):
-        print "page " + str(pid) + "  " + fmt_str.format(*seq_mgr.get_page_to_bytes_mappings(pid))
+        print "page " + str(pid) + "  " + fmt_str.format(*layout_mgr.get_page_to_bytes_mappings(pid))
 
 
 def test_2():
@@ -168,14 +168,14 @@ def test_2():
     bfn = 2
 
     print "------------------------------------------- sequential  "
-    seq_mgr = SequentialLayoutManager(frame_size=fs, replica_count=rc, total_page_count=tpc, base_frame_num=bfn)
+    layout_mgr = SequentialLayoutManager(frame_size=fs, replica_count=rc, total_page_count=tpc, base_frame_num=bfn)
     for pid in range(0, tpc):
-        print seq_mgr.get_page_to_bytes_mappings(pid)
+        print layout_mgr.get_page_to_bytes_mappings(pid)
 
     print "------------------------------------------- seq interleaved "
-    seq_mgr = SequentialInterleavedLayoutManager(frame_size=fs, replica_count=rc, total_page_count=tpc, base_frame_num=bfn)
+    layout_mgr = SequentialInterleavedLayoutManager(frame_size=fs, replica_count=rc, total_page_count=tpc, base_frame_num=bfn)
     for pid in range(0, tpc):
-        print seq_mgr.get_page_to_bytes_mappings(pid)
+        print layout_mgr.get_page_to_bytes_mappings(pid)
 
 
 if "__main__" == __name__:

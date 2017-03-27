@@ -8,6 +8,7 @@ import hashlib
 import struct
 import os
 
+import layoutmanager
 
 _REPLICA_COUNT_DEFAULT = 3
 _REPLICA_COUNT_MIN = 2
@@ -67,7 +68,31 @@ class RedArkiver:
         else:
             raise ValueError('no such file with the supplied filename was found')
 
-        # TODO its probably better to open and save file size here already.
+        #  open the file and and save the handle in this object.
+        self.infile = open(self.src_filename, "rb")
+
+        # find src file size first.
+        self.infile.seek(0, os.SEEK_END)
+        infile_size = self.infile.tell()
+        self.infile.seek(0, os.SEEK_SET)
+
+        print "source file appears to be: " + str(infile_size) + " bytes"
+        infile_size_rounded_up = 0
+
+        if infile_size % self.READ_SIZE == 0:
+            infile_size_rounded_up = infile_size
+        else:
+            # // is unconditionally the integer division with truncate operator.
+            infile_size_rounded_up = ((infile_size // self.READ_SIZE) + 1) * self.READ_SIZE
+
+        #print "source file after getting packet size aligned is: " + str(infile_size_rounded_up) + " bytes"
+
+        total_packet_count = infile_size_rounded_up // self.READ_SIZE
+        print "i believe i will need " + str(total_packet_count) + " packets in total"
+
+        self.layout_mgr = layoutmanager.SequentialInterleavedDistributedBeginningsLayoutManager(
+            frame_size=self.MAX_PACKET_SIZE, replica_count=self.REPLICA_COUNT, total_page_count=total_packet_count,
+            base_frame_num=0)
 
 
     def _make_packet(self, src_br, source_offset):
@@ -99,19 +124,6 @@ class RedArkiver:
 
         return bytes(packet_mutable)
 
-    def _get_offsets_for_packet_algo1(self, packetid, pkt_count):
-
-        offsets = []
-
-        # first the sequential offsets
-        offsets.append(packetid * self.MAX_PACKET_SIZE * self.REPLICA_COUNT)
-
-        # now the reverse sequential offsets
-        offsets.append( ((pkt_count - packetid) * self.REPLICA_COUNT * self.MAX_PACKET_SIZE) - self.MAX_PACKET_SIZE)
-
-        return offsets
-
-
 
     def redundantize_and_save(self, out_filename=None):
         """
@@ -125,34 +137,15 @@ class RedArkiver:
 
 
         # open in and out files for reading in binary modem and writing in binary mode
-        infile = open(self.src_filename, "rb")
         outfile = open(out_filename, "wb")
 
-        # find src file size first.
-        infile.seek(0, os.SEEK_END)
-        infile_size = infile.tell()
-        infile.seek(0, os.SEEK_SET)
-
-        print "source file appears to be: " + str(infile_size) + " bytes"
-        infile_size_rounded_up = 0
-
-        if infile_size % self.READ_SIZE == 0:
-            infile_size_rounded_up = infile_size
-        else:
-            # // is unconditionally the integer division with truncate operator.
-            infile_size_rounded_up = ((infile_size // self.READ_SIZE) + 1) * self.READ_SIZE
-
-        #print "source file after getting packet size aligned is: " + str(infile_size_rounded_up) + " bytes"
-
-        total_packet_count = infile_size_rounded_up // self.READ_SIZE
-        print "i believe i will need " + str(total_packet_count) + " packets in total"
 
         # this offset indicates where in the source file current payload was read from.
         source_offset = 0
-        packets_written = 0
+        curr_packet_id = 0
 
         # u can append an int (0,255) or extend using a bytes object.
-        src_br = bytearray(infile.read(self.READ_SIZE))
+        src_br = bytearray(self.infile.read(self.READ_SIZE))
 
 
         #while len(src_br) == self.READ_SIZE:
@@ -174,7 +167,7 @@ class RedArkiver:
                 packet_mutable.extend( [0 for i in xrange(self.MAX_PACKET_SIZE - len(packet)) ] )
                 packet = bytes(packet_mutable)
 
-            offsets = self._get_offsets_for_packet_algo1(packets_written, total_packet_count)
+            offsets = self.layout_mgr.get_page_to_bytes_mappings(curr_packet_id)
 
             for i in range(len(offsets)):
                 outfile.seek(offsets[i])
@@ -182,15 +175,14 @@ class RedArkiver:
                 #print "writing packet# " + str(packets_written) + " copy #" + str(i) + " offset is: " + str(offsets[i])
 
 
-            packets_written += 1
-
-            src_br = bytearray(infile.read(self.READ_SIZE))
+            curr_packet_id += 1
+            src_br = bytearray(self.infile.read(self.READ_SIZE))
 
         outfile.flush()
 
         outfile.seek(0, 2)
-        print "Redfile created. replica count: " + str(self.REPLICA_COUNT)
-        print "final size: " + str(outfile.tell()) + " -- total packets written: " + str(packets_written)
+        print "Redfile created. final size: " + str(outfile.tell())
+        print "replica count: " + str(self.REPLICA_COUNT) + " -- total packets written: " + str(curr_packet_id)
         print "########################################################################################################"
 
         # done with the loop
