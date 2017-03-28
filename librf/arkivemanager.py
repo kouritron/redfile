@@ -1,14 +1,9 @@
 
-
-""" redstream.py
-
-"""
-
 import hashlib
 import struct
 import os
-
 import layoutmanager
+
 
 _REPLICA_COUNT_DEFAULT = 3
 _REPLICA_COUNT_MIN = 2
@@ -29,7 +24,7 @@ def _get_hash(src_bytes):
 
 
 
-class RedArkiver:
+class RFArkiver:
 
     # 129 == 0x81
     # FLAG_BYTE = 129
@@ -189,7 +184,8 @@ class RedArkiver:
         outfile.close()
 
 
-class RedUnarkiver:
+
+class RFUnarkiver:
 
     def __init__(self, src_filename):
 
@@ -223,11 +219,11 @@ class RedUnarkiver:
         self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
         readbuf_immutable = bytes(self.infile.read(6))
 
-        while len(readbuf_immutable) >= len(RedArkiver.FLAG_SEQ):
+        while len(readbuf_immutable) >= len(RFArkiver.FLAG_SEQ):
             # we got something process it.
             advance_len = -1
 
-            if RedArkiver.FLAG_SEQ == readbuf_immutable[0: len(RedArkiver.FLAG_SEQ)]:
+            if RFArkiver.FLAG_SEQ == readbuf_immutable[0: len(RFArkiver.FLAG_SEQ)]:
                 # the len field is unsigned 16 int, hence max packet size is 2^16
                 self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
                 readbuf_immutable = bytes(self.infile.read(66000))
@@ -258,7 +254,7 @@ class RedUnarkiver:
           """
 
         # its not a valid packet, if i got less than a header size bytes
-        if len(possible_packet) <= RedArkiver.HEADER_SIZE:
+        if len(possible_packet) <= RFArkiver.HEADER_SIZE:
             return -1
 
         else:
@@ -278,7 +274,7 @@ class RedUnarkiver:
             field3_cksum = possible_packet[8: 40]
 
             # its not a valid packet, if it dont begin with flag sequence.
-            if field1_flag_seq != RedArkiver.FLAG_SEQ:
+            if field1_flag_seq != RFArkiver.FLAG_SEQ:
                 print ">>>>>>>>>>> not valid because it doesnt start with flag seq. why was i called then??? "
                 return -1
 
@@ -304,51 +300,4 @@ class RedUnarkiver:
             else:
                 # hash failed
                 return -1
-
-
-
-
-
-def clean_up_sample_dir(orig_files):
-
-    temp_files = []
-
-    for fname in orig_files:
-        temp_files.append(fname + ".redfile")
-        temp_files.append(fname + ".redfile.recovered")
-
-    for file in temp_files:
-        try:
-            os.remove(file)
-        except OSError:
-            pass
-
-
-
-
-if __name__ == '__main__':
-
-    base_dir = "../tests/sample_files/"
-
-    files = []
-    files.append(("test1", 2))
-    files.append(("test2", 2))
-    #files.append(("test3", 2))
-    #files.append(("test4", 2))
-    #files.append(("test5", 2))
-    files.append(("pic1.jpg", 3))
-    files.append(("pic2.jpg", 2))
-    files.append(("pic3.png", 2))
-
-
-    for fname, count in files:
-        fname_full = base_dir + fname
-        ra = RedArkiver(src_filename=fname_full, replica_count=count)
-        ra.redundantize_and_save()
-        ru = RedUnarkiver(src_filename=fname_full + ".redfile")
-        ru.recover_and_save()
-
-
-    #clean_up_sample_dir( [base_dir + fname   for fname, ignore in files ]  )
-
 

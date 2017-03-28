@@ -8,7 +8,7 @@
 
 
 import unittest
-from rfutil.layoutmanager import *
+from librf.layoutmanager import *
 
 
 class TestLayoutManager(unittest.TestCase):

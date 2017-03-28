@@ -1,38 +1,52 @@
 
 
-import hashlib
-
-from rfutil import estream
-
-def get_hash(src_bytes):
-    hash_func = hashlib.sha256()
-    hash_func.update(src_bytes)
-
-    # this will return a string "0f20....."
-    # return hash_func.hexdigest()
-
-    # this is the actual bytes (i.e. (15, 32, ...)) (maybe still as a str object tho)
-    # hash_func.hexdigest().decode('hex') == hash_func.digest()
-    return hash_func.hexdigest()
 
 
-def test_hash():
-    print "----------------------------------------------------------------"
-
-    test22321_str = b'Hello World\n'
-    test1_str = b'\Hello World'
-    test2_str = b'\x00\x00\x00\x00\x00\x00\x00\x00Hello World'
-    # test2 sha256  is  add1cbde5f210aed97cc2bce0699daaec734c88326d43c38d6427c6699e60f7b
+import os
+from librf import arkivemanager
 
 
-    print get_hash(test1_str)
-    print get_hash(test2_str)
+def clean_up_sample_dir(orig_files):
+
+    temp_files = []
+
+    for fname in orig_files:
+        temp_files.append(fname + ".redfile")
+        temp_files.append(fname + ".redfile.recovered")
+
+    for file in temp_files:
+        try:
+            os.remove(file)
+        except OSError:
+            pass
 
 
 
-if "__main__" == __name__:
-    test_hash()
+
+def debug_run1():
+
+    base_dir = "./tests/sample_files/"
+
+    files = []
+    files.append(("test1", 2))
+    files.append(("test2", 2))
+    files.append(("test3", 2))
+    files.append(("test4", 2))
+    files.append(("test5", 2))
+    files.append(("pic1.jpg", 3))
+    files.append(("pic2.jpg", 2))
+    files.append(("pic3.png", 2))
 
 
+    for fname, count in files:
+        fname_full = base_dir + fname
+        ra = arkivemanager.RFArkiver(src_filename=fname_full, replica_count=count)
+        ra.redundantize_and_save()
+        ru = arkivemanager.RFUnarkiver(src_filename=fname_full + ".redfile")
+        ru.recover_and_save()
 
-    print 'hi'
+    #clean_up_sample_dir( [base_dir + fname   for fname, ignore in files ]  )
+
+
+if __name__ == '__main__':
+    debug_run1()

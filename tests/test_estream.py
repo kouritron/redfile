@@ -10,7 +10,7 @@
 import os
 import hashlib
 import unittest
-from rfutil import estream
+from librf import estream
 
 
 
