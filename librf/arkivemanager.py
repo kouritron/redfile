@@ -5,9 +5,13 @@ import os
 import layoutmanager
 
 
-_REPLICA_COUNT_DEFAULT = 3
+_REPLICA_COUNT_DEFAULT = 4
 _REPLICA_COUNT_MIN = 2
 
+def _debug_msg(msg):
+
+    #print(msg)
+    pass
 
 def _get_hash(src_bytes):
     hash_func = hashlib.sha256()
@@ -54,6 +58,8 @@ class RFArkiver:
         else:
             raise ValueError('replica_count must be an int and >= ' + str(_REPLICA_COUNT_MIN))
 
+        #_debug_msg("++++++++++ cwd: " + str(os.getcwd()))
+
         # check if such a file exists or not. use these:
         # os.path.isfile    returns true if a file (or link to file is there)
         # os.path.isdir     returns true if a directory (or link to directory is there)
@@ -71,7 +77,7 @@ class RFArkiver:
         infile_size = self.infile.tell()
         self.infile.seek(0, os.SEEK_SET)
 
-        print "source file appears to be: " + str(infile_size) + " bytes"
+        _debug_msg("source file appears to be: " + str(infile_size) + " bytes")
         infile_size_rounded_up = 0
 
         if infile_size % self.READ_SIZE == 0:
@@ -80,10 +86,10 @@ class RFArkiver:
             # // is unconditionally the integer division with truncate operator.
             infile_size_rounded_up = ((infile_size // self.READ_SIZE) + 1) * self.READ_SIZE
 
-        #print "source file after getting packet size aligned is: " + str(infile_size_rounded_up) + " bytes"
+        #_debug_msg("source file after getting packet size aligned is: " + str(infile_size_rounded_up) + " bytes")
 
         total_packet_count = infile_size_rounded_up // self.READ_SIZE
-        print "i believe i will need " + str(total_packet_count) + " packets in total"
+        _debug_msg("i believe i will need " + str(total_packet_count) + " packets in total")
 
         self.layout_mgr = layoutmanager.SequentialInterleavedDistributedBeginningsLayoutManager(
             frame_size=self.MAX_PACKET_SIZE, replica_count=self.REPLICA_COUNT, total_page_count=total_packet_count,
@@ -127,8 +133,8 @@ class RFArkiver:
         if out_filename is None:
             out_filename = str(self.src_filename) + ".redfile"
 
-        print "--------------------------------------------------------------------------------------------------------"
-        print "creating redudant file. output file name: " + out_filename
+        _debug_msg("--------------------------------------------------------------------------------------------------")
+        _debug_msg("creating redudant file. output file name: " + out_filename)
 
 
         # open in and out files for reading in binary modem and writing in binary mode
@@ -157,7 +163,7 @@ class RFArkiver:
             # and it thus needs packets all to be the same size (the un-arkiver wont need this assumption tho)
             # note the padding isnt part of the packet. its just dead space before the next packet begins.
             if len(packet) < self.MAX_PACKET_SIZE:
-                print "Found short packet. len: " + str(len(packet)) + " I will pad this with 0s"
+                _debug_msg("Found short packet. len: " + str(len(packet)) + " I will pad this with 0s")
                 packet_mutable = bytearray(packet)
                 packet_mutable.extend( [0 for i in xrange(self.MAX_PACKET_SIZE - len(packet)) ] )
                 packet = bytes(packet_mutable)
@@ -167,7 +173,8 @@ class RFArkiver:
             for i in range(len(offsets)):
                 outfile.seek(offsets[i])
                 outfile.write(packet)
-                #print "writing packet# " + str(packets_written) + " copy #" + str(i) + " offset is: " + str(offsets[i])
+                #_debug_msg("writing packet# " + str(packets_written) + " copy #" + str(i) +
+                # " offset is: " + str(offsets[i]))
 
 
             curr_packet_id += 1
@@ -176,9 +183,9 @@ class RFArkiver:
         outfile.flush()
 
         outfile.seek(0, 2)
-        print "Redfile created. final size: " + str(outfile.tell())
-        print "replica count: " + str(self.REPLICA_COUNT) + " -- total packets written: " + str(curr_packet_id)
-        print "########################################################################################################"
+        _debug_msg("Redfile created. final size: " + str(outfile.tell()))
+        _debug_msg("replica count: " + str(self.REPLICA_COUNT) + " -- total packets written: " + str(curr_packet_id))
+        _debug_msg("##################################################################################################")
 
         # done with the loop
         outfile.close()
@@ -211,8 +218,8 @@ class RFUnarkiver:
 
         self.outfile = open(out_filename, "wb")
 
-        print "--------------------------------------------------------------------------------------------------------"
-        print "recovering original file from red arkive. output filename: " + out_filename
+        _debug_msg("--------------------------------------------------------------------------------------------------")
+        _debug_msg("recovering original file from red arkive. output filename: " + out_filename)
 
 
         potential_packet_start_offset = 0
@@ -275,13 +282,13 @@ class RFUnarkiver:
 
             # its not a valid packet, if it dont begin with flag sequence.
             if field1_flag_seq != RFArkiver.FLAG_SEQ:
-                print ">>>>>>>>>>> not valid because it doesnt start with flag seq. why was i called then??? "
+                _debug_msg(">>>>>>>>>>> not valid because it doesnt start with flag seq. why was i called then??? ")
                 return -1
 
             # its not a valid packet, if i have fewer bytes than the len field seems to indicate.
             if len(possible_packet) < field2_len:
-                print "not valid packet, because i seem to have fewer bytes than the len field says."
-                print "I got: " + str(len(possible_packet)) + " len_field says: " + str(field2_len)
+                _debug_msg("not valid packet, because i seem to have fewer bytes than the len field says.")
+                _debug_msg("I got: " + str(len(possible_packet)) + " len_field says: " + str(field2_len))
                 return -1
 
             # if we haven't returned False we can say this.
@@ -293,7 +300,7 @@ class RFUnarkiver:
             if bytes(field3_cksum) == bytes(_get_hash(possible_packet[40:field2_len])):
                 self.outfile.seek(field4_source_offset)
                 self.outfile.write(field5_source_data)
-                # TODO save somewhere the fact that this chunk was successfully recovered.
+                # TODO save somewhere the fact that this chunk was successfully recovered. (for forensic mode)
                 # so we can do plots and shit
 
                 return field2_len
@@ -301,3 +308,50 @@ class RFUnarkiver:
                 # hash failed
                 return -1
 
+
+
+def clean_up_sample_dir(orig_files):
+
+    temp_files = []
+
+    for fname in orig_files:
+        temp_files.append(fname + ".redfile")
+        temp_files.append(fname + ".redfile.recovered")
+
+    for file in temp_files:
+        try:
+            os.remove(file)
+        except OSError:
+            pass
+
+
+
+
+def debug_run1():
+
+    base_dir = "./tests/sample_files/"
+
+    files = []
+    files.append(("test1", 2))
+    files.append(("test2", 2))
+    files.append(("test3", 2))
+    files.append(("test4", 2))
+    files.append(("test5", 2))
+    files.append(("pic1.jpg", 3))
+    files.append(("pic2.jpg", 2))
+    files.append(("pic3.png", 2))
+
+
+    for fname, count in files:
+        fname_full = base_dir + fname
+        ra = RFArkiver(src_filename=fname_full, replica_count=count)
+        ra.redundantize_and_save()
+        ru = RFUnarkiver(src_filename=fname_full + ".redfile")
+        ru.recover_and_save()
+
+    #clean_up_sample_dir( [base_dir + fname   for fname, ignore in files ]  )
+
+
+if __name__ == '__main__':
+    # debug_run1()
+    pass

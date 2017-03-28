@@ -1,44 +1,21 @@
 
 
 
-# if you got rfutil module not found error, uncomment this. PyCharm IDE does not need it.
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('../'))
+## if you got rfutil module not found error, uncomment this. PyCharm IDE does not need it.
+import os
+import sys
+# add ../ and ./ to path, depending on what cwd was when python process was created, one of these might help find librf
+sys.path.insert(0, os.path.abspath('../'))
+sys.path.insert(0, os.path.abspath('./'))
+
+#print sys.path
 
 
 import os
-import hashlib
 import unittest
+from testutils import get_file_hash, make_file_with_random_content
 from librf import estream
 
-
-
-
-# ---------------------------------------------------- utility functions
-
-def get_file_hash(filename):
-    """ Return a str obj with the hex representation of the hash fingerprint
-    of the file with the given filename.
-    """
-    READ_SIZE = 8192 * 4
-    srcfile = open(filename, 'rb')
-    hash_func = hashlib.sha256()
-    buf = srcfile.read(READ_SIZE)
-    while len(buf) > 0:
-        hash_func.update(buf)
-        buf = srcfile.read(READ_SIZE)
-    return hash_func.hexdigest()
-
-
-def make_file_with_random_content(filename, filesz):
-    """ Create a binary file on disk filled with random content of filesz many bytes
-    with the given filename
-    """
-
-    # fout = open(filename, 'wb')
-    with open(filename, 'wb') as fout:
-        fout.write(os.urandom(filesz))
 
 
 

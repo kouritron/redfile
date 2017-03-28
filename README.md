@@ -9,3 +9,7 @@ For instance if you have a password manager databse file or some pictures or som
 
 Redfile is in beta at the moment. more info/doc will become available soon after version 1.0 is released. 
 
+#### to run the tests:
+
+cd tests/
+python test_*.py
