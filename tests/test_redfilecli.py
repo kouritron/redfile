@@ -51,8 +51,7 @@ class TestRedFileCli(unittest.TestCase):
 
         for file in files_to_remove:
             try:
-                #os.remove(file)
-                pass
+                os.remove(file)
             except OSError:
                 pass
 
