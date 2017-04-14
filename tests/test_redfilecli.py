@@ -17,7 +17,7 @@ import unittest
 import subprocess
 
 import librf
-from testutils import get_file_hash, make_file_with_random_content
+from testutils import get_file_hash, make_file_with_random_content, find_file_within_this_project
 
 
 
@@ -73,9 +73,9 @@ class TestRedFileCli(unittest.TestCase):
         # run redfile cli to make .redfile
         # run redfile cli to recover
         # check the recovered file hashes the same as original.
-        # this works because we have modified path on top of this file, so that this file is in sys path.
-        # abspath simply gives an absolute path to it.
-        rfcli_path = os.path.abspath("redfilecli.py")
+
+
+        rfcli_path = find_file_within_this_project("redfilecli.py")
         print rfcli_path
 
 

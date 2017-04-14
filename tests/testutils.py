@@ -26,3 +26,22 @@ def make_file_with_random_content(filename, filesz):
     # fout = open(filename, 'wb')
     with open(filename, 'wb') as fout:
         fout.write(os.urandom(filesz))
+
+
+def find_file_within_this_project(filename):
+
+    # current working directory is either redfile/ or redfile/tests
+    # so this is hopefully high enough point to start the search from
+    begin_search_root = ".."
+    result = None
+    # root is a string ( just the prefix of the current directory) (i.e. "/home/u/redfile" )
+    # directories a python list of all directories found within the current directory
+    # files a python list of all files found within the current directory
+    for root, directories, files in os.walk(begin_search_root):
+        if filename in files:
+            relative_path = os.path.join(root, filename)
+            result = os.path.abspath(relative_path)
+            print "Found absolute path to be: " + result
+            break
+
+    return result
