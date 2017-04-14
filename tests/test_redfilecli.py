@@ -6,7 +6,7 @@ import os
 import sys
 
 
-## if you got module not found errors, uncomment these. PyCharm IDE does not need it.
+# if you got module not found errors, uncomment these. PyCharm IDE does not need it.
 # get the abs version of . and .. and append them to this process's path.
 sys.path.append(os.path.abspath('..'))
 sys.path.append(os.path.abspath('.'))
