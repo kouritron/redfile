@@ -6,9 +6,9 @@ import sys
 
 
 ## if you got module not found errors, uncomment these. PyCharm IDE does not need it.
-# add ../ and ./ to path, depending on what cwd was when python process was created, one of these might help find librf
-sys.path.insert(0, os.path.abspath('../'))
-sys.path.insert(0, os.path.abspath('./'))
+# add .. and . to path, depending on what cwd was when python process was created, one of these might help find librf
+sys.path.insert(0, os.path.abspath('..'))
+sys.path.insert(0, os.path.abspath('.'))
 
 #print sys.path
 

@@ -73,7 +73,9 @@ class TestRedFileCli(unittest.TestCase):
         # run redfile cli to make .redfile
         # run redfile cli to recover
         # check the recovered file hashes the same as original.
-        rfcli_path = os.path.abspath("../redfilecli.py")
+        # this works because we have modified path on top of this file, so that this file is in sys path.
+        # abspath simply gives an absolute path to it.
+        rfcli_path = os.path.abspath("redfilecli.py")
         print rfcli_path
 
 
