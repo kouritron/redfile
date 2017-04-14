@@ -2,12 +2,14 @@
 
 
 
-## if you got rfutil module not found error, uncomment this. PyCharm IDE does not need it.
 import os
 import sys
-# add ../ and ./ to path, depending on what cwd was when python process was created, one of these might help find librf
-sys.path.insert(0, os.path.abspath('../'))
-sys.path.insert(0, os.path.abspath('./'))
+
+
+## if you got module not found errors, uncomment these. PyCharm IDE does not need it.
+# get the abs version of . and .. and append them to this process's path.
+sys.path.append(os.path.abspath('..'))
+sys.path.append(os.path.abspath('.'))
 
 #print sys.path
 

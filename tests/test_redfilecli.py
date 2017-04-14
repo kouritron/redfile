@@ -2,12 +2,14 @@
 
 
 
-## if you got rfutil module not found error, uncomment this. PyCharm IDE does not need it.
 import os
 import sys
-# add ../ and ./ to path, depending on what cwd was when python process was created, one of these might help find librf
-sys.path.insert(0, os.path.abspath('../'))
-sys.path.insert(0, os.path.abspath('./'))
+
+
+## if you got module not found errors, uncomment these. PyCharm IDE does not need it.
+# get the abs version of . and .. and append them to this process's path.
+sys.path.append(os.path.abspath('..'))
+sys.path.append(os.path.abspath('.'))
 
 #print sys.path
 
@@ -71,16 +73,19 @@ class TestRedFileCli(unittest.TestCase):
         # run redfile cli to make .redfile
         # run redfile cli to recover
         # check the recovered file hashes the same as original.
+        rfcli_path = os.path.abspath("../redfilecli.py")
+        print rfcli_path
+
 
         # python redfilecli.py -c -i ./tests/sample_files/pic1.jpg -o ark1.rf
         for testfile in self.testfiles:
-            cmd = 'python redfilecli.py -c -i ./' + testfile + ' -o ' + testfile + '.redfile'
+            cmd = 'python ' + rfcli_path + ' -c -i ./' + testfile + ' -o ' + testfile + '.redfile'
             print cmd
             subprocess.call(cmd, shell=True)
 
         # python redfilecli.py -x -i ark1.rf -o orig1.jpg
         for testfile in self.testfiles:
-            cmd = 'python redfilecli.py -x -i ./' + testfile + '.redfile -o ' + testfile + '.redfile.recovered'
+            cmd = 'python ' + rfcli_path + ' -x -i ./' + testfile + '.redfile -o ' + testfile + '.redfile.recovered'
             print cmd
             subprocess.call(cmd, shell=True)
 
