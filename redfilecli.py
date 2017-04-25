@@ -8,6 +8,20 @@ import getopt
 
 from librf import arkivemanager
 
+def _get_current_version():
+
+    version = None
+    try:
+        with open('./Version', 'r') as vf:
+            version = vf.readline().strip()
+    except:
+        pass
+
+    if not version:
+        version = 'unknown'
+
+    return version
+
 
 def xtract_arkive(src_filename, out_filename):
     print "------------------------------------------------------------------------------------------------------------"
@@ -33,7 +47,7 @@ def make_arkive(src_filename, out_filename):
 
 
 def main(arguments):
-    version = "v0.8"
+    version = _get_current_version()
     usage_msg = "Welcome to redfile (redundant file) command line interface. This is version: " + version + """
     Usage: 
     ### create new redundant arkive.  
