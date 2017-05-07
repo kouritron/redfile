@@ -3,8 +3,8 @@ import os
 import sys
 
 # this is for python 27, in py 3 this changed to tkinter i believe
-import Tkinter as ttkm
-#import ttk as ttkm
+import Tkinter as tkm
+import ttk as ttkm
 
 import tkFileDialog
 from librf import arkivemanager
@@ -45,7 +45,7 @@ class RedFileGui():
     def __init__(self):
 
         self.version = _get_current_version()
-        self.root = ttkm.Tk()
+        self.root = tkm.Tk()
         self.root.title('redfile ' + self.version)
 
 
@@ -53,7 +53,7 @@ class RedFileGui():
         # --------------------------------------------------------------------------------------------------------------
         # --------------------------------------------------------------------------------------------------------------
         # ---------------------------------------------------------------------------------------  choose xtract/create
-        action_group = ttkm.LabelFrame(self.root, text="Action", padx=5, pady=5)
+        action_group = ttkm.LabelFrame(self.root, text="Action")
 
         # anchor is set to CENTER by default.
         #action_group.pack(padx=10, pady=10, anchor=ttkm.CENTER)
@@ -63,19 +63,19 @@ class RedFileGui():
         # w.grid()
 
 
-        self.action_control_var = ttkm.IntVar()
+        self.action_control_var = tkm.IntVar()
         self.last_action = None
 
         option1_text = "Recover original data from redundant file."
         option2_text = "Make a redundant file"
 
         xtract_radio_btn = ttkm.Radiobutton(action_group, text=option1_text, variable=self.action_control_var,
-                                            value=Action.XTRACT, command=self.action_changed_callback, padx=5, pady=5)
-        xtract_radio_btn.pack(anchor=ttkm.W)
+                                            value=Action.XTRACT, command=self.action_changed_callback)
+        xtract_radio_btn.pack(anchor=tkm.W)
 
         create_radio_btn = ttkm.Radiobutton(action_group, text=option2_text, variable=self.action_control_var,
-                                            value=Action.CREATE, command=self.action_changed_callback, padx=5, pady=5)
-        create_radio_btn.pack(anchor=ttkm.W)
+                                            value=Action.CREATE, command=self.action_changed_callback)
+        create_radio_btn.pack(anchor=tkm.W)
 
 
         # --------------------------------------------------------------------------------------------------------------
@@ -83,26 +83,26 @@ class RedFileGui():
         # --------------------------------------------------------------------------------------------------------------
         # ------------------------------------------------------------------------------------------ file path box
 
-        file_names_group = ttkm.Frame(self.root, padx=5, pady=5)
+        file_names_group = ttkm.Frame(self.root)
         file_names_group.grid(row=0, column=1, padx=10, pady=10)
 
-        self.source_file_control_var = ttkm.StringVar()
-        self.output_file_control_var = ttkm.StringVar()
+        self.source_file_control_var = tkm.StringVar()
+        self.output_file_control_var = tkm.StringVar()
 
         src_label = ttkm.Label(file_names_group, text='Source file')
         src_btn = ttkm.Button(file_names_group, text='Browse', command=self.browse_source_file_btn_clicked)
         src_entry = ttkm.Entry(file_names_group, textvariable=self.source_file_control_var, width=_ENTRY_BOX_DEFAULT_WIDTH)
-        src_label.grid(row=0, column=0, padx=5, pady=5, sticky=ttkm.W)
-        src_btn.grid(row=0, column=1, padx=5, pady=5, sticky=ttkm.W)
+        src_label.grid(row=0, column=0, padx=5, pady=5, sticky=tkm.W)
+        src_btn.grid(row=0, column=1, padx=5, pady=5, sticky=tkm.W)
         src_entry.grid(row=1, column=0, padx=5, pady=1, columnspan=3)
 
         output_label = ttkm.Label(file_names_group, text='Output file')
         output_btn = ttkm.Button(file_names_group, text='Browse', command=self.browse_output_file_btn_clicked)
         auto_name_output_btn = ttkm.Button(file_names_group, text='Auto name output', command=self.auto_name_output_btn_clicked)
         output_entry = ttkm.Entry(file_names_group, textvariable=self.output_file_control_var, width=_ENTRY_BOX_DEFAULT_WIDTH)
-        output_label.grid(row=2, column=0, padx=5, pady=(20, 5), sticky=ttkm.W)
-        output_btn.grid(row=2, column=1, padx=5, pady=(20, 5), sticky=ttkm.W)
-        auto_name_output_btn.grid(row=2, column=2, padx=5, pady=(20, 5), sticky=ttkm.W)
+        output_label.grid(row=2, column=0, padx=5, pady=(20, 5), sticky=tkm.W)
+        output_btn.grid(row=2, column=1, padx=5, pady=(20, 5), sticky=tkm.W)
+        auto_name_output_btn.grid(row=2, column=2, padx=5, pady=(20, 5), sticky=tkm.W)
         output_entry.grid(row=3, column=0, padx=5, pady=1, columnspan=3)
 
 
@@ -111,27 +111,28 @@ class RedFileGui():
         # --------------------------------------------------------------------------------------------------------------
         # -------------------------------------------------------------------------------------- new redfile options box
 
-        new_arkive_options_group = ttkm.Frame(self.root, padx=5, pady=5)
-        new_arkive_options_group.grid(row=1, column=0, padx=10, pady=10, sticky=ttkm.W)
+        new_arkive_options_group = ttkm.Frame(self.root)
+        new_arkive_options_group.grid(row=1, column=0, padx=10, pady=10, sticky=tkm.W)
 
-        # sticky='w' or sticky=ttkm.W to make it west aligned with its master
+        # sticky='w' or sticky=tkm.W to make it west aligned with its master
         replica_count_label = ttkm.Label(new_arkive_options_group, text='replica count')
-        self.replica_count_spinbox = ttkm.Spinbox(new_arkive_options_group, values= _REPLICA_COUNT_POSSIBLE_VALUES,
+        self.replica_count_spinbox = tkm.Spinbox(new_arkive_options_group, values= _REPLICA_COUNT_POSSIBLE_VALUES,
                                                   width=_REPLICA_COUNT_BOX_DEFAULT_WIDTH)
 
-        self.replica_count_spinbox.delete(0, ttkm.END)
+        self.replica_count_spinbox.delete(0, tkm.END)
         self.replica_count_spinbox.insert(0, 4)
 
 
-        # u can pass css/html like color to fg. i.e. #fff is white #ffffff is also white.
-        replica_count_desc_label = ttkm.Label(new_arkive_options_group, text='Min: 2, recommended: 4 or more', fg='#999')
-        replica_count_label.grid(row=0, column=0, padx=5, pady=2, sticky=ttkm.W)
+        # u can pass css/html like color to foreground. i.e. #fff is white #ffffff is also white.
+        replica_count_desc_label = ttkm.Label(new_arkive_options_group, text='Min: 2, recommended: 4 or more',
+                                              foreground='#999')
+        replica_count_label.grid(row=0, column=0, padx=5, pady=2, sticky=tkm.W)
         self.replica_count_spinbox.grid(row=0, column=1, padx=5, pady=2)
-        replica_count_desc_label.grid(row=1, column=0, padx=5, pady=2, columnspan=2, sticky=ttkm.W)
+        replica_count_desc_label.grid(row=1, column=0, padx=5, pady=2, columnspan=2, sticky=tkm.W)
 
 
 
-        ttkm.Label(new_arkive_options_group, text='layout manager').grid(row=2, column=0, padx=5, pady=(20, 5), sticky=ttkm.W)
+        ttkm.Label(new_arkive_options_group, text='layout manager').grid(row=2, column=0, padx=5, pady=(20, 5), sticky=tkm.W)
         ttkm.Label(new_arkive_options_group, text='chooser here').grid(row=2, column=1, padx=5, pady=(20, 5))
 
 
@@ -140,7 +141,7 @@ class RedFileGui():
         # --------------------------------------------------------------------------------------------------------------
         # --------------------------------------------------------------------------------------------------------------
         # ------------------------------------------------------------------------------------------ go box
-        go_group = ttkm.Frame(self.root, padx=5, pady=5)
+        go_group = ttkm.Frame(self.root)
         go_group.grid(row=1, column=1, padx=10, pady=10)
 
         ttkm.Button(go_group, text='Go', command=self.go_btn_clicked).grid(row=0, column=0, padx=5, pady=5)
