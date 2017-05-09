@@ -17,13 +17,17 @@ _REPLICA_COUNT_POSSIBLE_VALUES = tuple(range(2,100)) + tuple(range(100, 1040, 10
 # width is in chars
 _REPLICA_COUNT_BOX_DEFAULT_WIDTH = 10
 
+_PHYSICAL_LAYOUTS = ("Distributed", "Sequential", "Random")
+
+_BLOCK_SIZES = (256, 512, 1024, 2048, 4096, 8192, 16384, 32768)
+
 
 def _get_current_version():
 
     version = None
     try:
-        with open('./Version', 'r') as vf:
-            version = vf.readline().strip()
+        import librf._version as vm
+        version = vm.__version__
     except:
         pass
 
@@ -88,53 +92,91 @@ class RedFileGui():
 
         self.source_file_control_var = tkm.StringVar()
         self.output_file_control_var = tkm.StringVar()
+        self.autoname_checkbox_control_var = tkm.IntVar()
 
         src_label = ttkm.Label(file_names_group, text='Source file')
         src_btn = ttkm.Button(file_names_group, text='Browse', command=self.browse_source_file_btn_clicked)
         src_entry = ttkm.Entry(file_names_group, textvariable=self.source_file_control_var, width=_ENTRY_BOX_DEFAULT_WIDTH)
+
+
+        output_label = ttkm.Label(file_names_group, text='Output file')
+        self.browse_output_filename_btn = ttkm.Button(file_names_group, text='Browse', command=self.browse_output_file_btn_clicked)
+        autoname_checkbox = ttkm.Checkbutton(file_names_group, var=self.autoname_checkbox_control_var,
+                                                text='Auto name output', command=self.autoname_checkbox_clicked)
+        self.output_filename_entry = ttkm.Entry(file_names_group, textvariable=self.output_file_control_var, width=_ENTRY_BOX_DEFAULT_WIDTH)
+
+
         src_label.grid(row=0, column=0, padx=5, pady=5, sticky=tkm.W)
         src_btn.grid(row=0, column=1, padx=5, pady=5, sticky=tkm.W)
         src_entry.grid(row=1, column=0, padx=5, pady=1, columnspan=3)
 
-        output_label = ttkm.Label(file_names_group, text='Output file')
-        output_btn = ttkm.Button(file_names_group, text='Browse', command=self.browse_output_file_btn_clicked)
-        auto_name_output_btn = ttkm.Button(file_names_group, text='Auto name output', command=self.auto_name_output_btn_clicked)
-        output_entry = ttkm.Entry(file_names_group, textvariable=self.output_file_control_var, width=_ENTRY_BOX_DEFAULT_WIDTH)
         output_label.grid(row=2, column=0, padx=5, pady=(20, 5), sticky=tkm.W)
-        output_btn.grid(row=2, column=1, padx=5, pady=(20, 5), sticky=tkm.W)
-        auto_name_output_btn.grid(row=2, column=2, padx=5, pady=(20, 5), sticky=tkm.W)
-        output_entry.grid(row=3, column=0, padx=5, pady=1, columnspan=3)
+        self.browse_output_filename_btn.grid(row=2, column=1, padx=5, pady=(20, 5), sticky=tkm.W)
+        autoname_checkbox.grid(row=2, column=2, padx=5, pady=(20, 5), sticky=tkm.W)
+
+        self.output_filename_entry.grid(row=3, column=0, padx=5, pady=1, columnspan=3)
 
 
         # --------------------------------------------------------------------------------------------------------------
         # --------------------------------------------------------------------------------------------------------------
         # --------------------------------------------------------------------------------------------------------------
         # -------------------------------------------------------------------------------------- new redfile options box
-
+        hint_color = '#999'
         new_arkive_options_group = ttkm.Frame(self.root)
         new_arkive_options_group.grid(row=1, column=0, padx=10, pady=10, sticky=tkm.W)
 
+        # --------- replica count widgets
+
         # sticky='w' or sticky=tkm.W to make it west aligned with its master
-        replica_count_label = ttkm.Label(new_arkive_options_group, text='replica count')
+        replica_count_label = ttkm.Label(new_arkive_options_group, text='Replica count')
         self.replica_count_spinbox = tkm.Spinbox(new_arkive_options_group, values= _REPLICA_COUNT_POSSIBLE_VALUES,
                                                   width=_REPLICA_COUNT_BOX_DEFAULT_WIDTH)
 
         self.replica_count_spinbox.delete(0, tkm.END)
         self.replica_count_spinbox.insert(0, 4)
-
+        self.replica_count_spinbox.configure(state='readonly')
 
         # u can pass css/html like color to foreground. i.e. #fff is white #ffffff is also white.
         replica_count_desc_label = ttkm.Label(new_arkive_options_group, text='Min: 2, recommended: 4 or more',
-                                              foreground='#999')
+                                              foreground=hint_color)
+
+        # --------- physical layout widgets
+        phy_layout_desc = ttkm.Label(new_arkive_options_group, text='Default: distributed', foreground=hint_color)
+        phy_layout_desc2 = ttkm.Label(new_arkive_options_group, text='Random is not recommended', foreground=hint_color)
+        phy_layout = ttkm.Label(new_arkive_options_group, text='Physical layout')
+        self.phy_layout_combo = ttkm.Combobox(new_arkive_options_group, values=_PHYSICAL_LAYOUTS)
+        self.phy_layout_combo.delete(0, tkm.END)
+        self.phy_layout_combo.insert(0, _PHYSICAL_LAYOUTS[0])
+        self.phy_layout_combo.configure(state='readonly')
+
+        # --------- block size widgets
+
+        block_size_desc = ttkm.Label(new_arkive_options_group, text='Default: 512 bytes', foreground=hint_color)
+        block_size_label = ttkm.Label(new_arkive_options_group, text='Block Size')
+        self.block_size_combo = ttkm.Combobox(new_arkive_options_group, values= _BLOCK_SIZES)
+        self.block_size_combo.delete(0, tkm.END)
+        self.block_size_combo.insert(0, _BLOCK_SIZES[1])
+
+
+
+        # --------- position them all
         replica_count_label.grid(row=0, column=0, padx=5, pady=2, sticky=tkm.W)
-        self.replica_count_spinbox.grid(row=0, column=1, padx=5, pady=2)
+        self.replica_count_spinbox.grid(row=0, column=1, padx=5, pady=2,  sticky=tkm.W)
         replica_count_desc_label.grid(row=1, column=0, padx=5, pady=2, columnspan=2, sticky=tkm.W)
 
+        phy_layout.grid(row=2, column=0, padx=5, pady=(20, 5), sticky=tkm.W)
+        self.phy_layout_combo.grid(row=2, column=1, padx=5, pady=(20, 5))
+        phy_layout_desc.grid(row=3, column=0, padx=5, pady=(2, 1), columnspan=2, sticky=tkm.W)
+        phy_layout_desc2.grid(row=4, column=0, padx=5, pady=(1, 5), columnspan=2, sticky=tkm.W)
+
+        block_size_label.grid(row=5, column=0, padx=5, pady=5, sticky=tkm.W)
+        self.block_size_combo.grid(row=5, column=1, padx=5, pady=5, sticky=tkm.W)
+        block_size_desc.grid(row=6, column=0, padx=5, pady=5, columnspan=2, sticky=tkm.W)
 
 
-        ttkm.Label(new_arkive_options_group, text='layout manager').grid(row=2, column=0, padx=5, pady=(20, 5), sticky=tkm.W)
-        ttkm.Label(new_arkive_options_group, text='chooser here').grid(row=2, column=1, padx=5, pady=(20, 5))
-
+        self.replica_count_spinbox.configure(state=tkm.DISABLED)
+        self.phy_layout_combo.configure(state=tkm.DISABLED)
+        self.block_size_combo.configure(state=tkm.DISABLED)
 
 
         # --------------------------------------------------------------------------------------------------------------
@@ -144,10 +186,33 @@ class RedFileGui():
         go_group = ttkm.Frame(self.root)
         go_group.grid(row=1, column=1, padx=10, pady=10)
 
-        ttkm.Button(go_group, text='Go', command=self.go_btn_clicked).grid(row=0, column=0, padx=5, pady=5)
-        ttkm.Label(go_group, text='progress bar coming soon :D').grid(row=1, column=0, padx=5, pady=5)
+        #ttkm.Label(go_group, text='progress bar coming soon :D')
+        go_btn = ttkm.Button(go_group, text='Go', command=self.go_btn_clicked)
+
+        self.progress_control_var = tkm.DoubleVar()
+        self.progress_control_var.set(0)
+        self.progress_bar = ttkm.Progressbar(go_group, orient=tkm.HORIZONTAL, variable=self.progress_control_var,
+                                        mode='determinate', maximum=100, length=250)
 
 
+        go_btn.grid(row=0, column=0, padx=5, pady=(5,10) )
+        self.progress_bar.grid(row=1, column=0, padx=5, pady=(10,5) )
+
+        # TODO remove this. should be done when some1 clicks go button.
+        self.progress_bar.after(ms=500, func=self.update_progress_bar)
+
+
+
+
+    def update_progress_bar(self):
+        """ Update the progress bar. Called by progress bar itself on the main loop to update itself. """
+
+        if self.progress_control_var <= 100:
+            #self.progress_control_var.set( self.progress_control_var.get()+1 )
+            self.progress_control_var.set( 10 )
+
+        # re-schedule another update
+        self.progress_bar.after(ms=500, func=self.update_progress_bar)
 
 
 
@@ -158,6 +223,17 @@ class RedFileGui():
         print "action radio button callback called"
 
         selected_action = self.action_control_var.get()
+
+        if selected_action == Action.XTRACT:
+            self.replica_count_spinbox.configure(state=tkm.DISABLED)
+            self.phy_layout_combo.configure(state=tkm.DISABLED)
+            self.block_size_combo.configure(state=tkm.DISABLED)
+
+        elif selected_action == Action.CREATE:
+            self.replica_count_spinbox.configure(state='readonly')
+            self.phy_layout_combo.configure(state='readonly')
+            self.block_size_combo.configure(state='readonly')
+
 
         if (selected_action == Action.XTRACT) and (selected_action != self.last_action):
             print "user switched to xtract"
@@ -173,13 +249,17 @@ class RedFileGui():
 
     def go_btn_clicked(self):
 
-        if self.last_action is None:
+
+        if None == self.last_action :
+
+            # TODO maybe show the user why this go click is being ignored (i.e. ask them to choose action)
             return
 
         elif self.last_action == Action.CREATE:
             print "creating new arkive plz standby"
             print "replica count is: " + str(self.replica_count_spinbox.get())
-
+            print "physical layout is: " + str(self.phy_layout_combo.get())
+            print "block size is: " + str(self.block_size_combo.get())
 
         elif self.last_action == Action.XTRACT:
             print "recovering original data from arkive plz standby"
@@ -196,11 +276,25 @@ class RedFileGui():
         print "user chosen output filename: " + str(user_chosen_filename)
         self.output_file_control_var.set(user_chosen_filename)
 
-    def auto_name_output_btn_clicked(self):
+    def autoname_checkbox_clicked(self):
         """ """
-        print "choosing output file name automatically from input"
+        print "autoname toggled. "
+        print "autoname contorl var: " + str(self.autoname_checkbox_control_var.get())
 
         # TODO scan the dir for existing files and add -1 -2 -21 -2221 if need be.
+
+        if self.autoname_checkbox_control_var.get():
+            # autoname on, disable the filename chooser
+            self.output_filename_entry.configure(state=tkm.DISABLED)
+            self.browse_output_filename_btn.configure(state=tkm.DISABLED)
+        else:
+            # autoname off, enable the filename chooser
+            self.output_filename_entry.configure(state=tkm.NORMAL)
+            self.browse_output_filename_btn.configure(state=tkm.NORMAL)
+
+
+
+
 
 
 

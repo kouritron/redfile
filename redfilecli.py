@@ -12,8 +12,8 @@ def _get_current_version():
 
     version = None
     try:
-        with open('./Version', 'r') as vf:
-            version = vf.readline().strip()
+        import librf._version as vm
+        version = vm.__version__
     except:
         pass
 
