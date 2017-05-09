@@ -190,9 +190,9 @@ class RedFileGui():
         go_btn = ttkm.Button(go_group, text='Go', command=self.go_btn_clicked)
 
         self.progress_control_var = tkm.DoubleVar()
-        self.progress_control_var.set(0)
         self.progress_bar = ttkm.Progressbar(go_group, orient=tkm.HORIZONTAL, variable=self.progress_control_var,
                                         mode='determinate', maximum=100, length=250)
+        self.progress_control_var.set(0)
 
 
         go_btn.grid(row=0, column=0, padx=5, pady=(5,10) )
@@ -207,7 +207,7 @@ class RedFileGui():
     def update_progress_bar(self):
         """ Update the progress bar. Called by progress bar itself on the main loop to update itself. """
 
-        if self.progress_control_var <= 100:
+        if self.progress_control_var.get() <= 100:
             #self.progress_control_var.set( self.progress_control_var.get()+1 )
             self.progress_control_var.set( 10 )
 
