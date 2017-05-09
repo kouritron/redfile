@@ -7,7 +7,8 @@ import Tkinter as tkm
 import ttk as ttkm
 
 import tkFileDialog
-from librf import arkivemanager
+import os
+
 
 # width is in chars
 _ENTRY_BOX_DEFAULT_WIDTH = 40
@@ -35,6 +36,25 @@ def _get_current_version():
         version = 'unknown'
 
     return version
+
+
+
+def _make_arkive(src_filename, out_filename, replica_count):
+    """ Create a new redundant arkive. """
+
+    from librf import arkivemanager
+    print "------------------------------------------------------------------------------------------------------------"
+    print "creating arkive, plz standby. "
+    print "input file: " + str(src_filename)
+    print "output file: " + str(out_filename)
+    print "replica count: " + str(replica_count)
+
+    #
+    arkiver = arkivemanager.RFArkiver(src_filename=src_filename ,replica_count=replica_count)
+    arkiver.redundantize_and_save(out_filename=out_filename)
+
+    print "Done. librf arkiver returned."
+
 
 
 class Action(object):
@@ -249,19 +269,51 @@ class RedFileGui():
 
     def go_btn_clicked(self):
 
+        src_filename = self.source_file_control_var.get()
 
         if None == self.last_action :
 
             # TODO maybe show the user why this go click is being ignored (i.e. ask them to choose action)
+            print "last action does not exist returning."
             return
 
-        elif self.last_action == Action.CREATE:
+        if not os.path.isfile(src_filename):
+
+            print "src file does not exist returning."
+            return
+
+        if self.last_action == Action.CREATE:
+
+            rc = None
+            try:
+                rc = int(self.replica_count_spinbox.get())
+            except:
+                pass
+
+
+            # now figure out the output filename
+            output_filename = self.output_file_control_var.get()
+
+            try:
+                output_test = open(output_filename, 'w')
+                output_test.close()
+            except:
+                print 'failed to open output filename for writing. '
+                return
+
+
             print "creating new arkive plz standby"
-            print "replica count is: " + str(self.replica_count_spinbox.get())
+            print "replica count is: " + str(rc)
+            print "src filename is: " + str(src_filename)
+            print "output filename is: " + str(output_filename)
             print "physical layout is: " + str(self.phy_layout_combo.get())
             print "block size is: " + str(self.block_size_combo.get())
+            _make_arkive(src_filename=src_filename, out_filename=output_filename, replica_count=rc)
 
-        elif self.last_action == Action.XTRACT:
+
+
+
+        if self.last_action == Action.XTRACT:
             print "recovering original data from arkive plz standby"
 
 
@@ -287,11 +339,31 @@ class RedFileGui():
             # autoname on, disable the filename chooser
             self.output_filename_entry.configure(state=tkm.DISABLED)
             self.browse_output_filename_btn.configure(state=tkm.DISABLED)
+            self._find_unused_output_name_if_possible()
         else:
             # autoname off, enable the filename chooser
             self.output_filename_entry.configure(state=tkm.NORMAL)
             self.browse_output_filename_btn.configure(state=tkm.NORMAL)
 
+
+    def _find_unused_output_name_if_possible(self):
+        """ Find an unused filename for output if possible and set the corresponding control variable. """
+
+        src_filename = self.source_file_control_var.get()
+        if not os.path.isfile(src_filename):
+            print "src path is not a file. cant generate output name atm. "
+            return
+
+        candidate_name = src_filename + '.redfile'
+        if not os.path.isfile(candidate_name):
+            self.output_file_control_var.set(candidate_name)
+            return
+
+        for i in range(2, 100):
+            candidate_name = src_filename + '-' + str(i) + '.redfile'
+            if not os.path.isfile(candidate_name):
+                self.output_file_control_var.set(candidate_name)
+                return
 
 
 
