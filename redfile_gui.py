@@ -9,9 +9,10 @@ import ttk as ttkm
 import tkFileDialog
 import os
 
+from librf import arkivemanager
 
 # width is in chars
-_ENTRY_BOX_DEFAULT_WIDTH = 40
+_ENTRY_BOX_DEFAULT_WIDTH = 60
 
 _REPLICA_COUNT_POSSIBLE_VALUES = tuple(range(2,100)) + tuple(range(100, 1040, 10)) + tuple(range(1050, 15100, 100))
 
@@ -42,7 +43,7 @@ def _get_current_version():
 def _make_arkive(src_filename, out_filename, replica_count):
     """ Create a new redundant arkive. """
 
-    from librf import arkivemanager
+
     print "------------------------------------------------------------------------------------------------------------"
     print "creating arkive, plz standby. "
     print "input file: " + str(src_filename)
@@ -55,6 +56,17 @@ def _make_arkive(src_filename, out_filename, replica_count):
 
     print "Done. librf arkiver returned."
 
+
+def _xtract_arkive(src_filename, out_filename):
+    print "------------------------------------------------------------------------------------------------------------"
+    print "xtracting arkive, plz standby. "
+    print "input file: " + str(src_filename)
+    print "output file: " + str(out_filename)
+
+    xtractor = arkivemanager.RFUnarkiver(src_filename=src_filename)
+    xtractor.recover_and_save(out_filename=out_filename)
+
+    print "Done. librf arkiver returned."
 
 
 class Action(object):
@@ -71,6 +83,13 @@ class RedFileGui():
         self.version = _get_current_version()
         self.root = tkm.Tk()
         self.root.title('redfile ' + self.version)
+
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(0, weight=1)
+
+        self.root.grid_rowconfigure(1, weight=1)
+        self.root.grid_columnconfigure(1, weight=1)
+
 
 
         # --------------------------------------------------------------------------------------------------------------
@@ -136,6 +155,10 @@ class RedFileGui():
 
         self.output_filename_entry.grid(row=3, column=0, padx=5, pady=1, columnspan=3)
 
+        file_names_group.grid_columnconfigure(0, weight=1)
+        file_names_group.grid_columnconfigure(1, weight=1)
+        file_names_group.grid_columnconfigure(2, weight=5)
+
 
         # --------------------------------------------------------------------------------------------------------------
         # --------------------------------------------------------------------------------------------------------------
@@ -143,7 +166,7 @@ class RedFileGui():
         # -------------------------------------------------------------------------------------- new redfile options box
         hint_color = '#999'
         new_arkive_options_group = ttkm.Frame(self.root)
-        new_arkive_options_group.grid(row=1, column=0, padx=10, pady=10, sticky=tkm.W)
+        new_arkive_options_group.grid(row=1, column=0, padx=10, pady=10)
 
         # --------- replica count widgets
 
@@ -263,9 +286,10 @@ class RedFileGui():
             print "user switched to create"
 
 
-
         # remember last action.
         self.last_action = selected_action
+        if self.autoname_checkbox_control_var.get():
+            self._find_unused_output_name_if_possible()
 
     def go_btn_clicked(self):
 
@@ -282,6 +306,17 @@ class RedFileGui():
             print "src file does not exist returning."
             return
 
+        # now figure out the output filename
+        output_filename = self.output_file_control_var.get()
+
+        try:
+            output_test = open(output_filename, 'w')
+            output_test.close()
+            os.remove(output_filename)
+        except:
+            print 'failed to open output filename for writing. '
+            return
+
         if self.last_action == Action.CREATE:
 
             rc = None
@@ -289,18 +324,6 @@ class RedFileGui():
                 rc = int(self.replica_count_spinbox.get())
             except:
                 pass
-
-
-            # now figure out the output filename
-            output_filename = self.output_file_control_var.get()
-
-            try:
-                output_test = open(output_filename, 'w')
-                output_test.close()
-            except:
-                print 'failed to open output filename for writing. '
-                return
-
 
             print "creating new arkive plz standby"
             print "replica count is: " + str(rc)
@@ -312,9 +335,16 @@ class RedFileGui():
 
 
 
-
         if self.last_action == Action.XTRACT:
+
             print "recovering original data from arkive plz standby"
+            print "src filename is: " + str(src_filename)
+            print "output filename is: " + str(output_filename)
+            _xtract_arkive(src_filename=src_filename, out_filename=output_filename)
+
+
+
+
 
 
 
@@ -322,6 +352,8 @@ class RedFileGui():
         user_chosen_filename = tkFileDialog.askopenfilename()
         print "user chosen source filename: " + str(user_chosen_filename)
         self.source_file_control_var.set(user_chosen_filename)
+        if self.autoname_checkbox_control_var.get():
+            self._find_unused_output_name_if_possible()
 
     def browse_output_file_btn_clicked(self):
         user_chosen_filename = tkFileDialog.asksaveasfilename()
@@ -349,18 +381,28 @@ class RedFileGui():
     def _find_unused_output_name_if_possible(self):
         """ Find an unused filename for output if possible and set the corresponding control variable. """
 
-        src_filename = self.source_file_control_var.get()
-        if not os.path.isfile(src_filename):
-            print "src path is not a file. cant generate output name atm. "
+        postfix = ''
+        if self.last_action == Action.XTRACT:
+            postfix = '.redfile_recovered'
+        elif self.last_action == Action.CREATE:
+            postfix = '.redfile'
+        else:
+            print "no action is selected yet. wont try to cmd name output file atm."
             return
 
-        candidate_name = src_filename + '.redfile'
+
+        src_filename = self.source_file_control_var.get()
+        if not os.path.isfile(src_filename):
+            print "src path is not a file. cant generate output name atm."
+            return
+
+        candidate_name = src_filename + postfix
         if not os.path.isfile(candidate_name):
             self.output_file_control_var.set(candidate_name)
             return
 
         for i in range(2, 100):
-            candidate_name = src_filename + '-' + str(i) + '.redfile'
+            candidate_name = src_filename + '-' + str(i) + postfix
             if not os.path.isfile(candidate_name):
                 self.output_file_control_var.set(candidate_name)
                 return
