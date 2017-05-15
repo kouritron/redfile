@@ -18,7 +18,8 @@ from librf import arkivemanager
 #-----------------------------------------------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------- global synced state
 
-rf_mutex = threading.BoundedSemaphore(value=1)
+#rf_mutex = threading.BoundedSemaphore(value=1)
+rf_mutex = threading.RLock()
 rf_mutex_next_job = None
 
 # rf_mutex_progress_pct can be a number between 0 and 100 to indicate percentage of current job done
@@ -131,16 +132,8 @@ def _worker_thread_entry():
 
 
 
-
-
-
-
-
-
-
 def _make_arkive(src_filename, out_filename, replica_count):
     """ Create a new redundant arkive. """
-
 
     print "------------------------------------------------------------------------------------------------------------"
     print "creating arkive, plz standby. "
@@ -149,7 +142,7 @@ def _make_arkive(src_filename, out_filename, replica_count):
     print "replica count: " + str(replica_count)
 
     #
-    arkiver = arkivemanager.RFArkiver(src_filename=src_filename ,replica_count=replica_count,
+    arkiver = arkivemanager.RFArkiver(src_filename=src_filename, replica_count=replica_count,
                                       progress_callback=_progress_report_callback)
     arkiver.redundantize_and_save(out_filename=out_filename)
 
@@ -162,10 +155,10 @@ def _xtract_arkive(src_filename, out_filename):
     print "input file: " + str(src_filename)
     print "output file: " + str(out_filename)
 
-    xtractor = arkivemanager.RFUnarkiver(src_filename=src_filename)
+    xtractor = arkivemanager.RFUnarkiver(src_filename=src_filename, progress_callback=_progress_report_callback)
     xtractor.recover_and_save(out_filename=out_filename)
 
-    print "Done. librf arkiver returned."
+    print "Done. librf xtractor returned."
 
 class RFJob(object):
     """" a struct (as close to it as possible in python) to keep track of a job. """

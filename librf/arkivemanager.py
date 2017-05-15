@@ -183,7 +183,6 @@ class RFArkiver(object):
             curr_packet_id += 1
             src_br = bytearray(self.infile.read(self.READ_SIZE))
 
-            print "worker thread says hi. curr packet id: " + str(curr_packet_id)
             # if a progress report call back is installed call it to give updates about progress so far
             # don't do this once for each packet, do it once in 100 or 1000 packets
             if (0 == (curr_packet_id % 1000)) and (self.progress_callback):
@@ -208,9 +207,18 @@ class RFArkiver(object):
 
 
 
-class RFUnarkiver:
+class RFUnarkiver(object):
 
-    def __init__(self, src_filename):
+    def __init__(self, src_filename, progress_callback=None):
+        """ Init a new Red File arkive extractor. Takes in the filepath of where a potentially heavily damaged 
+        red file is.
+         
+         if progress_callback is supplied, during recovery, it will occassionally call that 
+         function with a number between 0 and 100 to indicate progress so far. 
+         """
+
+        super(RFUnarkiver, self).__init__()
+        self.progress_callback = progress_callback
 
         # check if such a file exists or not. use these:
         # os.path.isfile    returns true if a file (or link to file is there)
@@ -224,6 +232,14 @@ class RFUnarkiver:
         # its possible that the file was on disk when the previous lines ran and no longer on disk now.
         # TODO maybe the above check is unnecessary, i kept in case we want to handle directories differently.
         self.infile = open(src_filename, "rb")
+
+        # find the size of src file.
+        self.infile.seek(0, os.SEEK_END)
+        self.src_size = self.infile.tell()
+        self.infile.seek(0, os.SEEK_SET)
+
+
+
 
     def recover_and_save(self, out_filename=None):
         """
@@ -242,6 +258,8 @@ class RFUnarkiver:
         self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
         readbuf_immutable = bytes(self.infile.read(6))
 
+        bytes_processed_so_far = 0
+
         while len(readbuf_immutable) >= len(RFArkiver.FLAG_SEQ):
             # we got something process it.
             advance_len = -1
@@ -256,14 +274,23 @@ class RFUnarkiver:
             if advance_len > 0:
                 # we successfully processed a packet, advance by advance_len many bytes
                 potential_packet_start_offset += advance_len
+                bytes_processed_so_far += advance_len
             else:
                 # meaning no packet was found, advance our search by just one byte
                 potential_packet_start_offset += 1
+                bytes_processed_so_far += 1
 
 
             # advance into the file.
             self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
             readbuf_immutable = bytes(self.infile.read(6))
+
+            if( (self.progress_callback) and (67000 == bytes_processed_so_far % 512000) ):
+                pct_complete = float(bytes_processed_so_far) / float(self.src_size)
+                pct_complete = pct_complete * 100
+                self.progress_callback(pct_complete)
+
+
 
 
 
