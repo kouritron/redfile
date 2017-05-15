@@ -8,8 +8,27 @@ import ttk as ttkm
 
 import tkFileDialog
 import os
+import threading
+import time
+
 
 from librf import arkivemanager
+
+
+#-----------------------------------------------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------------------------- global synced state
+
+rf_mutex = threading.BoundedSemaphore(value=1)
+rf_mutex_next_job = None
+
+# rf_mutex_progress_pct can be a number between 0 and 100 to indicate percentage of current job done
+# None to indicate no job is running right now
+rf_mutex_progress_pct = None
+
+
+
+#-----------------------------------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------------------------------
 
 # width is in chars
 _ENTRY_BOX_DEFAULT_WIDTH = 60
@@ -22,6 +41,8 @@ _REPLICA_COUNT_BOX_DEFAULT_WIDTH = 10
 _PHYSICAL_LAYOUTS = ("Distributed", "Sequential", "Random")
 
 _BLOCK_SIZES = (256, 512, 1024, 2048, 4096, 8192, 16384, 32768)
+
+_PROGRESS_BAR_UPDATE_PERIOD = 500
 
 
 def _get_current_version():
@@ -39,6 +60,83 @@ def _get_current_version():
     return version
 
 
+def _progress_report_callback(pct_complete=None):
+    """ Given a number between 0 and 100, indicating percentage of progress done so far, 
+     update the UIs progress state, if pct_complete was not supplied or was None do nothing. """
+
+    #print "_progress_report_callback() called with: " + str(pct_complete)
+
+    global rf_mutex
+    global rf_mutex_progress_pct
+
+    if None == pct_complete:
+        return
+
+    if not (isinstance(pct_complete, int) or isinstance(pct_complete, float) ):
+        return
+
+    if (pct_complete < 0) or (pct_complete > 100):
+        return
+
+    rf_mutex.acquire()
+    rf_mutex_progress_pct = pct_complete
+    rf_mutex.release()
+
+
+
+def _worker_thread_entry():
+
+    print "worker thread entry point called. "
+    global rf_mutex
+    global rf_mutex_next_job
+    global rf_mutex_progress_pct
+
+    while True:
+
+
+        # sleep for some time, argument is in seconds. (0.5 == half a second)
+        time.sleep(0.5)
+
+        tmp_job = None
+
+        rf_mutex.acquire()
+        tmp_job = rf_mutex_next_job
+        rf_mutex_next_job = None
+        rf_mutex.release()
+
+
+        # if tmp_job existed, process this job wait for it to finish (ok to block the worker thread) and then continue
+        # if tmp job did not exist continue to the top of the loop right away
+
+        if (tmp_job) and (isinstance(tmp_job, RFJob) ):
+
+            print "worker thread found work"
+
+            # UNPACK the job and call _make_arkive or _xtract_arkive
+            if Action.CREATE == tmp_job.action:
+                _make_arkive(src_filename=tmp_job.src_filename, out_filename=tmp_job.out_filename,
+                             replica_count=tmp_job.replica_count)
+
+            elif Action.XTRACT == tmp_job.action:
+                _xtract_arkive(src_filename=tmp_job.src_filename, out_filename=tmp_job.out_filename)
+
+
+
+
+
+            # wait for librf to finish (that is make or xtract returns)
+            rf_mutex.acquire()
+            rf_mutex_progress_pct = 100
+            rf_mutex.release()
+
+
+
+
+
+
+
+
+
 
 def _make_arkive(src_filename, out_filename, replica_count):
     """ Create a new redundant arkive. """
@@ -51,7 +149,8 @@ def _make_arkive(src_filename, out_filename, replica_count):
     print "replica count: " + str(replica_count)
 
     #
-    arkiver = arkivemanager.RFArkiver(src_filename=src_filename ,replica_count=replica_count)
+    arkiver = arkivemanager.RFArkiver(src_filename=src_filename ,replica_count=replica_count,
+                                      progress_callback=_progress_report_callback)
     arkiver.redundantize_and_save(out_filename=out_filename)
 
     print "Done. librf arkiver returned."
@@ -68,6 +167,24 @@ def _xtract_arkive(src_filename, out_filename):
 
     print "Done. librf arkiver returned."
 
+class RFJob(object):
+    """" a struct (as close to it as possible in python) to keep track of a job. """
+
+
+    def __init__(self, action=None, src_filename=None, out_filename=None, replica_count=None,
+                 physical_layout=None, block_size=None):
+        super(RFJob, self).__init__()
+
+        # TODO more error checking here, also figure out how to take out asserts in the pyinstaller version
+        assert (action == Action.CREATE) or (action == Action.XTRACT)
+
+        self.action = action
+        self.src_filename = src_filename
+        self.out_filename = out_filename
+        self.replica_count = replica_count
+        self.physical_layout = physical_layout
+        self.block_size = block_size
+
 
 class Action(object):
     """" Enumerate different modes of operation of the GUI. """
@@ -76,10 +193,27 @@ class Action(object):
     XTRACT = 2
 
 
-class RedFileGui():
+class RedFileGui(object):
 
     def __init__(self):
 
+        super(RedFileGui, self).__init__()
+        # --------------------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
+        # -----------------------------------------------------------------------------------  create the worker thread
+        print "main thread will now create the worker thread"
+        self.rf_worker_thread = threading.Thread(target=_worker_thread_entry)
+        self.rf_worker_thread.daemon = True
+        self.rf_worker_thread.start()
+
+        print "main thread has created worker thread successfully and started it."
+
+
+        # --------------------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
+        # ---------------------------------------------------------------------------------------
         self.version = _get_current_version()
         self.root = tkm.Tk()
         self.root.title('redfile ' + self.version)
@@ -230,7 +364,7 @@ class RedFileGui():
         go_group.grid(row=1, column=1, padx=10, pady=10)
 
         #ttkm.Label(go_group, text='progress bar coming soon :D')
-        go_btn = ttkm.Button(go_group, text='Go', command=self.go_btn_clicked)
+        self.go_btn = ttkm.Button(go_group, text='Go', command=self.go_btn_clicked)
 
         self.progress_control_var = tkm.DoubleVar()
         self.progress_bar = ttkm.Progressbar(go_group, orient=tkm.HORIZONTAL, variable=self.progress_control_var,
@@ -238,11 +372,12 @@ class RedFileGui():
         self.progress_control_var.set(0)
 
 
-        go_btn.grid(row=0, column=0, padx=5, pady=(5,10) )
+        self.go_btn.grid(row=0, column=0, padx=5, pady=(5,10) )
         self.progress_bar.grid(row=1, column=0, padx=5, pady=(10,5) )
 
         # TODO remove this. should be done when some1 clicks go button.
-        self.progress_bar.after(ms=500, func=self.update_progress_bar)
+        # or just schedule it to run once every while.
+        self.progress_bar.after(ms=_PROGRESS_BAR_UPDATE_PERIOD, func=self.update_progress_bar)
 
 
 
@@ -250,12 +385,24 @@ class RedFileGui():
     def update_progress_bar(self):
         """ Update the progress bar. Called by progress bar itself on the main loop to update itself. """
 
-        if self.progress_control_var.get() <= 100:
-            #self.progress_control_var.set( self.progress_control_var.get()+1 )
-            self.progress_control_var.set( 10 )
+        global rf_mutex
+        global rf_mutex_progress_pct
+
+        rf_mutex.acquire()
+        temp_progress = rf_mutex_progress_pct
+        rf_mutex.release()
+
+        if None == temp_progress:
+            self.progress_control_var.set(0)
+            self.go_btn.configure(state=tkm.NORMAL)
+        else:
+            self.progress_control_var.set( temp_progress )
+            if 100 == temp_progress:
+                self.go_btn.configure(state=tkm.NORMAL)
+
 
         # re-schedule another update
-        self.progress_bar.after(ms=500, func=self.update_progress_bar)
+        self.progress_bar.after(ms=_PROGRESS_BAR_UPDATE_PERIOD, func=self.update_progress_bar)
 
 
 
@@ -293,6 +440,12 @@ class RedFileGui():
 
     def go_btn_clicked(self):
 
+        self.go_btn.configure(state=tkm.DISABLED)
+
+        global rf_mutex
+        global rf_mutex_next_job
+        global rf_mutex_progress_pct
+
         src_filename = self.source_file_control_var.get()
 
         if None == self.last_action :
@@ -325,22 +478,39 @@ class RedFileGui():
             except:
                 pass
 
-            print "creating new arkive plz standby"
+            block_size = None
+            try:
+                block_size = int(self.block_size_combo.get())
+            except:
+                pass
+
+            phy_layout = self.phy_layout_combo.get()
+
+            print "adding job to make a new arkive plz standby"
             print "replica count is: " + str(rc)
             print "src filename is: " + str(src_filename)
             print "output filename is: " + str(output_filename)
             print "physical layout is: " + str(self.phy_layout_combo.get())
             print "block size is: " + str(self.block_size_combo.get())
-            _make_arkive(src_filename=src_filename, out_filename=output_filename, replica_count=rc)
+            # _make_arkive(src_filename=src_filename, out_filename=output_filename, replica_count=rc)
 
+            rf_mutex.acquire()
+            rf_mutex_next_job = RFJob(action=Action.CREATE, src_filename=src_filename, out_filename=output_filename,
+                                      replica_count=rc, block_size=block_size, physical_layout=phy_layout)
+            rf_mutex_progress_pct = 0
+            rf_mutex.release()
 
+        elif self.last_action == Action.XTRACT:
 
-        if self.last_action == Action.XTRACT:
-
-            print "recovering original data from arkive plz standby"
+            print "adding job to recover original data from arkive plz standby"
             print "src filename is: " + str(src_filename)
             print "output filename is: " + str(output_filename)
-            _xtract_arkive(src_filename=src_filename, out_filename=output_filename)
+            #_xtract_arkive(src_filename=src_filename, out_filename=output_filename)
+
+            rf_mutex.acquire()
+            rf_mutex_next_job = RFJob(action=Action.XTRACT, src_filename=src_filename, out_filename=output_filename)
+            rf_mutex_progress_pct = 0
+            rf_mutex.release()
 
 
 

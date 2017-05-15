@@ -28,7 +28,7 @@ def _get_hash(src_bytes):
 
 
 
-class RFArkiver:
+class RFArkiver(object):
 
     # 129 == 0x81
     # FLAG_BYTE = 129
@@ -49,7 +49,10 @@ class RFArkiver:
 
     # careful with argument defaults, they are evaluated once at function definition, not every time its called
     # good practice to avoid using mutable objects for argument defaults.
-    def __init__(self, src_filename, replica_count=None):
+    def __init__(self, src_filename, replica_count=None, progress_callback=None):
+
+        super(RFArkiver, self).__init__()
+        self.progress_callback = progress_callback
 
         if replica_count is None:
             self.REPLICA_COUNT = _REPLICA_COUNT_DEFAULT
@@ -88,12 +91,12 @@ class RFArkiver:
 
         #_debug_msg("source file after getting packet size aligned is: " + str(infile_size_rounded_up) + " bytes")
 
-        total_packet_count = infile_size_rounded_up // self.READ_SIZE
-        _debug_msg("i believe i will need " + str(total_packet_count) + " packets in total")
+        self.total_packet_count = infile_size_rounded_up // self.READ_SIZE
+        print("i believe i will need " + str(self.total_packet_count) + " packets in total")
 
         self.layout_mgr = layoutmanager.SequentialInterleavedDistributedBeginningsLayoutManager(
-            frame_size=self.MAX_PACKET_SIZE, replica_count=self.REPLICA_COUNT, total_page_count=total_packet_count,
-            base_frame_num=0)
+            frame_size=self.MAX_PACKET_SIZE, replica_count=self.REPLICA_COUNT,
+            total_page_count=self.total_packet_count, base_frame_num=0)
 
 
     def _make_packet(self, src_br, source_offset):
@@ -179,6 +182,19 @@ class RFArkiver:
 
             curr_packet_id += 1
             src_br = bytearray(self.infile.read(self.READ_SIZE))
+
+            print "worker thread says hi. curr packet id: " + str(curr_packet_id)
+            # if a progress report call back is installed call it to give updates about progress so far
+            # don't do this once for each packet, do it once in 100 or 1000 packets
+            if (0 == (curr_packet_id % 1000)) and (self.progress_callback):
+
+                pct_complete = (float(curr_packet_id) / float(self.total_packet_count)) * 100
+
+                #print "curr packet id is: " + str(float(curr_packet_id))
+                #print "pct is: " + str(float(curr_packet_id) / float(self.total_packet_count))
+
+                self.progress_callback( pct_complete )
+
 
         outfile.flush()
 
