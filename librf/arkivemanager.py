@@ -237,6 +237,7 @@ class RFUnarkiver(object):
         self.infile.seek(0, os.SEEK_END)
         self.src_size = self.infile.tell()
         self.infile.seek(0, os.SEEK_SET)
+        #print ">> xtractor belives its src file is: " + str(self.src_size) + " many bytes"
 
 
 
@@ -285,9 +286,10 @@ class RFUnarkiver(object):
             self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
             readbuf_immutable = bytes(self.infile.read(6))
 
-            if( (self.progress_callback) and (67000 == bytes_processed_so_far % 512000) ):
+            if( (self.progress_callback) and (0 == bytes_processed_so_far % 512000) ):
                 pct_complete = float(bytes_processed_so_far) / float(self.src_size)
                 pct_complete = pct_complete * 100
+                #print ">> xtractor belief of pct complete: " + str(pct_complete)
                 self.progress_callback(pct_complete)
 
 
