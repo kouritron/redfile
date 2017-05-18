@@ -18,7 +18,7 @@ from librf import arkivemanager
 #-----------------------------------------------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------- global synced state
 
-#rf_mutex = threading.BoundedSemaphore(value=1)
+# rf_mutex = threading.BoundedSemaphore(value=1)
 rf_mutex = threading.RLock()
 rf_mutex_next_job = None
 
@@ -62,7 +62,7 @@ def _get_current_version():
 
 
 def _progress_report_callback(pct_complete=None):
-    """ Given a number between 0 and 100, indicating percentage of progress done so far, 
+    """ Given a number between 0 and 100, indicating percentage of progress done so far,
      update the UIs progress state, if pct_complete was not supplied or was None do nothing. """
 
     #print "_progress_report_callback() called with: " + str(pct_complete)
@@ -587,6 +587,3 @@ if __name__ == '__main__':
 
 
     _start_gui()
-
-
-

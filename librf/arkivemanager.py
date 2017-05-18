@@ -42,9 +42,9 @@ class RFArkiver(object):
     # this should also never be set to less than 256 or even 512. higher than 4k is also not recommended,
     # higher than 64k is disallowed (wont fit in the 2 byte len field)
     MAX_PACKET_SIZE = 512
-    HEADER_SIZE = 48
+    HEADER_SIZE = 80
 
-    # 512 - 48 == 464
+    # 512 - 80 == 432
     READ_SIZE = MAX_PACKET_SIZE - HEADER_SIZE
 
     # careful with argument defaults, they are evaluated once at function definition, not every time its called
@@ -80,6 +80,19 @@ class RFArkiver(object):
         infile_size = self.infile.tell()
         self.infile.seek(0, os.SEEK_SET)
 
+        # compute the hash of the entire source file:
+        hash_func = hashlib.sha256()
+        chunk = bytes(self.infile.read(4096))
+        while len(chunk) > 0:
+            hash_func.update(chunk)
+            chunk = bytes(self.infile.read(4096))
+
+        self.src_fp = hash_func.digest()
+        print "the sha256 fingerprint of src file appears to be: " + str(self.src_fp.encode('hex'))
+
+        # reset seek location back to the beginning of the file
+        self.infile.seek(0, os.SEEK_SET)
+
         _debug_msg("source file appears to be: " + str(infile_size) + " bytes")
         infile_size_rounded_up = 0
 
@@ -100,6 +113,10 @@ class RFArkiver(object):
 
 
     def _make_packet(self, src_br, source_offset):
+        """ Given a few bytes (src_br) and an offset of the source file from which these bytes were read,
+        make a packet (or call it page) that will go into the output carrying as payload the src bytes, along with
+        any necessary header info. """
+
         # create a bytearray for the redundant stream, byte array is mutable ( [] syntax works fine )
         packet_mutable = bytearray()
         packet_after_cksum_mutable = bytearray()
@@ -116,6 +133,7 @@ class RFArkiver(object):
 
         # then we have a source byte offset as an unsigned 8 byte int.
         packet_after_cksum_mutable.extend(struct.pack('!Q', source_offset))
+        packet_after_cksum_mutable.extend( self.src_fp )
 
         # add the actual source
         packet_after_cksum_mutable.extend(src_br)
@@ -210,11 +228,11 @@ class RFArkiver(object):
 class RFUnarkiver(object):
 
     def __init__(self, src_filename, progress_callback=None):
-        """ Init a new Red File arkive extractor. Takes in the filepath of where a potentially heavily damaged 
+        """ Init a new Red File arkive extractor. Takes in the filepath of where a potentially heavily damaged
         red file is.
-         
-         if progress_callback is supplied, during recovery, it will occassionally call that 
-         function with a number between 0 and 100 to indicate progress so far. 
+
+         if progress_callback is supplied, during recovery, it will occassionally call that
+         function with a number between 0 and 100 to indicate progress so far.
          """
 
         super(RFUnarkiver, self).__init__()
@@ -315,11 +333,12 @@ class RFUnarkiver(object):
             # if this is a real packet. it should have these items in it (in order):
             # Field1: 6 bytes flag_seq
             # Field2: 2 bytes len field, (unsigned network byte order) (len of header and payload)
-            # Field3: 32 bytes sha256 sum
+            # Field3: 32 bytes sha256 sum of the below fields
             # Field4: (after cksum) source offset -- index into the original source file where data
             #         was read from, 8 bytes unsigned network order
-            # Field5: (after cksum) source data
-            # note that packet payload is field 4 and 5 combined.
+            # Field5: (after cksum) source file sha256 fingerprint.
+            # Field6: (after cksum) source data
+            # note that packet payload is field 4, 5 an 6 combined.
 
             field1_flag_seq = possible_packet[0:6]
             field2_len = struct.unpack("!H", possible_packet[6: 8])[0]
@@ -338,13 +357,14 @@ class RFUnarkiver(object):
 
             # if we haven't returned False we can say this.
             field4_source_offset = struct.unpack("!Q", possible_packet[40:48])[0]
-            field5_source_data = possible_packet[48:field2_len]
+            field5_source_fp = possible_packet[48:80]
+            field6_source_data = possible_packet[80:field2_len]
 
 
             # if cksum confirms this packet's identity save its data at the offset it indicates.
             if bytes(field3_cksum) == bytes(_get_hash(possible_packet[40:field2_len])):
                 self.outfile.seek(field4_source_offset)
-                self.outfile.write(field5_source_data)
+                self.outfile.write(field6_source_data)
                 # TODO save somewhere the fact that this chunk was successfully recovered. (for forensic mode)
                 # so we can do plots and shit
 
