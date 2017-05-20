@@ -13,6 +13,7 @@ Inside the redfile arkive, There is no special block, such as superblock, direct
 
 ### To run:
 download (or clone this repo), go the top directory and run:
+
 python redfilegui.py
 
 (to run the GUI you need python and Tkinter which comes with python installation on windows)
