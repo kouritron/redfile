@@ -3,6 +3,8 @@ import hashlib
 import struct
 import os
 import layoutmanager
+import random
+import shutil
 
 
 _REPLICA_COUNT_DEFAULT = 4
@@ -105,7 +107,7 @@ class RFArkiver(object):
         #_debug_msg("source file after getting packet size aligned is: " + str(infile_size_rounded_up) + " bytes")
 
         self.total_packet_count = infile_size_rounded_up // self.READ_SIZE
-        print("i believe i will need " + str(self.total_packet_count) + " packets in total")
+        print("i believe i will need " + str(self.total_packet_count) + " packets. (not counting replication)")
 
         self.layout_mgr = layoutmanager.SequentialInterleavedDistributedBeginningsLayoutManager(
             frame_size=self.MAX_PACKET_SIZE, replica_count=self.REPLICA_COUNT,
@@ -203,7 +205,8 @@ class RFArkiver(object):
 
             # if a progress report call back is installed call it to give updates about progress so far
             # don't do this once for each packet, do it once in 100 or 1000 packets
-            if (0 == (curr_packet_id % 1000)) and (self.progress_callback):
+            period = max(10, int(4000 // self.REPLICA_COUNT))
+            if (0 == (curr_packet_id % period)) and (self.progress_callback):
 
                 pct_complete = (float(curr_packet_id) / float(self.total_packet_count)) * 100
 
@@ -245,7 +248,7 @@ class RFUnarkiver(object):
         if os.path.isfile(src_filename):
             self.src_filename = src_filename
         else:
-            raise ValueError('no such file with the supplied filename was found')
+            raise ValueError('no such file exists.')
 
         # its possible that the file was on disk when the previous lines ran and no longer on disk now.
         # TODO maybe the above check is unnecessary, i kept in case we want to handle directories differently.
@@ -255,19 +258,67 @@ class RFUnarkiver(object):
         self.infile.seek(0, os.SEEK_END)
         self.src_size = self.infile.tell()
         self.infile.seek(0, os.SEEK_SET)
-        #print ">> xtractor belives its src file is: " + str(self.src_size) + " many bytes"
+        #print ">> xtractor believes its src file is: " + str(self.src_size) + " many bytes"
 
+    def _get_rand_name_with_size(self, size):
+        """ Given positive int size, return a random name (file name/dir name) of len == size. """
+
+        charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+        charset_len = len(charset)
+        result = 'rftmp_'
+
+        for i in xrange(size):
+            rand_idx = int(random.random() * charset_len)
+            rand_char = charset[rand_idx:rand_idx + 1]
+            result += rand_char
+
+        return result
+
+    def _choose_temp_dir_name(self, out_filename):
+
+        # try to find a name with 6 random chars
+        for i in xrange(100):
+            temp_dir_name = self._get_rand_name_with_size(8)
+            temp_dir_path = os.path.join(self.base_dir, temp_dir_name)
+            # print "candidate for temp dir: " + temp_dir_path
+            if not os.path.exists(temp_dir_path):
+                print "found un-used name: "  + temp_dir_path
+                return temp_dir_path
+
+        # if that didnt work out, try to find a name with 16 random chars
+        for i in xrange(100):
+            temp_dir_name = self._get_rand_name_with_size(16)
+            temp_dir_path = os.path.join(self.base_dir, temp_dir_name)
+            # print "candidate for temp dir: " + temp_dir_path
+            if not os.path.exists(temp_dir_path):
+                print "found un-used name: "  + temp_dir_path
+                return temp_dir_path
 
 
 
     def recover_and_save(self, out_filename=None):
-        """
-        """
+        """ Try to recover the original data and save it to out_filename. """
+
 
         if out_filename is None:
             out_filename = str(self.src_filename) + ".recovered"
 
-        self.outfile = open(out_filename, "wb")
+
+        # make a temp directory to put the recovered file(s) in.
+        self.base_dir = os.path.dirname(out_filename)
+        if '' == self.base_dir:
+            self.base_dir = '.'
+
+        print "choosing temp dir. out_filename: " + str(out_filename)
+        print "choosing temp dir. dir name is: " + str(self.base_dir)
+
+        self.rftmp_dir = self._choose_temp_dir_name(out_filename=out_filename)
+
+        # this could raise error if no perm to create directory among other things.
+        # TODO handle this for the GUI, for cmd line ui its fine to just let the error propagate.
+        os.makedirs(self.rftmp_dir)
+
+        self.outfiles = {}
 
         _debug_msg("--------------------------------------------------------------------------------------------------")
         _debug_msg("recovering original file from red arkive. output filename: " + out_filename)
@@ -311,10 +362,54 @@ class RFUnarkiver(object):
                 self.progress_callback(pct_complete)
 
 
+        # if there is only one file handle in self.outfiles dict then move it out, rename it to what user gave us.
+        # else rename the temp folder ___name user gave us_files___
+
+        num_files_found = len(self.outfiles)
+        for tmp_fname, tmp_fhandle in self.outfiles.items():
+            tmp_fhandle.flush()
+            tmp_fhandle.close()
+
+        try:
+            if 1 == num_files_found:
+                # move the one file out from self.rftmp_dir to self.base_dir and del self.rftmp_dir
+                tmp_fname, tmp_fhandle = self.outfiles.items()[0]
+                shutil.move(src=os.path.join(self.rftmp_dir, tmp_fname),
+                            dst=os.path.join(self.base_dir, os.path.basename(out_filename)))
+                shutil.rmtree(path=self.rftmp_dir)
+            elif 1 < num_files_found:
+                # rename the folder whose path is in self.rftmp_dir
+                shutil.move(self.rftmp_dir, out_filename)
+
+        except OSError, e:
+            print "Failed to perform clean up on the tmp directory."
+            print e.strerror
+
+
+        # delete the temp directory.
+        # make sure to properly handle closing file handles before moving copying deleting.
+        print "recover and save finished."
 
 
 
 
+
+    def _get_dest_file_handle(self, dest_fingerprint):
+        """ Given a sha256 fingerprint (hex str) of the file that is being recovered, find and return the 
+        correct file handle for that file. """
+
+        # print "file handle requested for file with fp: " + dest_fingerprint
+
+        if self.outfiles.has_key(dest_fingerprint):
+            return self.outfiles[dest_fingerprint]
+
+        # lazily create the file handle, save it, and return it
+        print "lazily creating new outfile for this fp: " + dest_fingerprint
+        new_outfile_path = os.path.join(self.rftmp_dir, dest_fingerprint)
+        new_outfile = open( new_outfile_path , 'wb')
+        self.outfiles[dest_fingerprint] = new_outfile
+
+        return self.outfiles[dest_fingerprint]
 
 
 
@@ -363,8 +458,14 @@ class RFUnarkiver(object):
 
             # if cksum confirms this packet's identity save its data at the offset it indicates.
             if bytes(field3_cksum) == bytes(_get_hash(possible_packet[40:field2_len])):
-                self.outfile.seek(field4_source_offset)
-                self.outfile.write(field6_source_data)
+
+
+                # TODO dont save to outfile, use field5 to lazily get the correct file handle and save there.
+                dest_filehandle = self._get_dest_file_handle(dest_fingerprint=field5_source_fp.encode('hex'))
+
+                dest_filehandle.seek(field4_source_offset)
+                dest_filehandle.write(field6_source_data)
+
                 # TODO save somewhere the fact that this chunk was successfully recovered. (for forensic mode)
                 # so we can do plots and shit
 
@@ -375,26 +476,34 @@ class RFUnarkiver(object):
 
 
 
-def clean_up_sample_dir(orig_files):
+def _log_progress(pct_complete=None):
 
-    temp_files = []
-
-    for fname in orig_files:
-        temp_files.append(fname + ".redfile")
-        temp_files.append(fname + ".redfile.recovered")
-
-    for file in temp_files:
+    if pct_complete:
+        pct_str = None
         try:
-            os.remove(file)
-        except OSError:
-            pass
+            pct_str = str(int(pct_complete)) + " %"
+        except Exception as e:
+            raise
+        print "progress so far: " + pct_str
 
+
+
+def try_del_files_at_base(base_dir, files):
+    """ Try to delete files found in directory base_dir. if error was raised by os module try the next file
+    in the files list. """
+
+    for f in files:
+        try:
+            os.remove(base_dir + f)
+        except OSError, e:
+            print "Error cant delete: " + str(base_dir+f) + " reason: "
+            print str(e.strerror)
 
 
 
 def debug_run1():
 
-    base_dir = "./tests/sample_files/"
+    base_dir = "../tests/sample_files/"
 
     files = []
     files.append(("test1", 2))
@@ -406,17 +515,26 @@ def debug_run1():
     files.append(("pic2.jpg", 2))
     files.append(("pic3.png", 2))
 
+    ra = None
+    ru = None
 
     for fname, count in files:
         fname_full = base_dir + fname
-        ra = RFArkiver(src_filename=fname_full, replica_count=count)
+        ra = RFArkiver(src_filename=fname_full, replica_count=count, progress_callback=_log_progress)
         ra.redundantize_and_save()
         ru = RFUnarkiver(src_filename=fname_full + ".redfile")
         ru.recover_and_save()
 
-    #clean_up_sample_dir( [base_dir + fname   for fname, ignore in files ]  )
+    # these are needed on windows to garbage collect last ra, ru right away
+    # otherwise the last 2 files can't be deleted, because win fs api doesnt allow open files to be deleted (unix does)
+    del ra
+    del ru
+
+
+    try_del_files_at_base(base_dir=base_dir, files=[f+'.redfile' for f, c in files])
+    try_del_files_at_base(base_dir=base_dir, files=[f+'.redfile.recovered' for f, c in files])
 
 
 if __name__ == '__main__':
-    # debug_run1()
-    pass
+    print "running arkivemanager"
+    debug_run1()

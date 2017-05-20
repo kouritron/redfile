@@ -1,6 +1,6 @@
 ###############################################################################
 
-## PyCharm 
+## PyCharm
 .idea/
 
 ## kate
@@ -11,10 +11,19 @@
 *.rand_bin
 *.redfile
 *.redfile.recovered
+*.recovered
+*.redfile_recovered
+
 
 *.rf
 orig1.jpg
 orig.jpg
+pic1.jpg
+pic2.jpg
+pic3.jpg
+pic3.png
+
+rftmp_*/
 
 ###############################################################################
 ############################################################### Compiled source
@@ -126,21 +135,3 @@ ENV/
 
 # Rope project settings
 .ropeproject
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
