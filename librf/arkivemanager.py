@@ -39,6 +39,15 @@ class Layout(object):
     SEQUENTIAL = 2
     RANDOM = 3
 
+class PayloadType(object):
+    """" Enumerate different types of payload a packet could deliver. """
+
+    # regular data packet
+    DATA = 0
+
+    # metadata packet. (can save things like file names here.)
+    META = 1
+
 
 
 class RFArkiver(object):
@@ -48,7 +57,7 @@ class RFArkiver(object):
     # FLAG_BYTE = 129
     FLAG_SEQ = b'\x81\x81\x81\x81\x81\x81'
 
-    HEADER_SIZE = 80
+    HEADER_SIZE = 82
 
 
     # careful with argument defaults, they are evaluated once at function definition, not every time its called
@@ -88,7 +97,7 @@ class RFArkiver(object):
             self.MAX_PACKET_SIZE = _BLOCK_SIZE_DEF
 
 
-        # example: 512 - 80 == 432
+        # example: 512 - 82 == 430
         self.READ_SIZE = self.MAX_PACKET_SIZE - self.HEADER_SIZE
 
         # memorize the layout choice if it was valid.
@@ -101,7 +110,7 @@ class RFArkiver(object):
 
 
 
-    def _make_packet(self, src_br, source_offset):
+    def _make_packet(self, src_br, source_offset, payload_type):
         """ Given a few bytes (src_br) and an offset of the source file from which these bytes were read,
         make a packet (or call it page) that will go into the output carrying as payload the src bytes, along with
         any necessary header info. """
@@ -122,7 +131,15 @@ class RFArkiver(object):
 
         # then we have a source byte offset as an unsigned 8 byte int.
         packet_after_cksum_mutable.extend(struct.pack('!Q', source_offset))
+
+        # next is the fingerprint of the src file.
         packet_after_cksum_mutable.extend( self.src_fp )
+
+        # next is 2 byte options field. (look at the PayloadType enum)
+        # 0 indicates payload is a regular packet.
+        # 1 indicates payload is a metadata packet. (can save src filename here)
+        # remaining values are un-used atm.
+        packet_after_cksum_mutable.extend(struct.pack('!H', payload_type))
 
         # add the actual source
         packet_after_cksum_mutable.extend(src_br)
@@ -137,8 +154,11 @@ class RFArkiver(object):
 
 
     def redundantize_and_save(self, src_filename, out_filename=None):
-        """ Given the pathname of src file and output file. make a redudant file from src and save it into output.
+        """ Given the pathname of src file and output file. make a redundant file from src and save it into output.
+        if out_filename is not supplied it will default to src_filename + '.rff' 
+        
         """
+
         # check if such a file exists or not. use these:
         # os.path.isfile    returns true if a file (or link to file is there)
         # os.path.isdir     returns true if a directory (or link to directory is there)
@@ -221,7 +241,7 @@ class RFArkiver(object):
         #while len(src_br) == self.READ_SIZE:
         while len(src_br) > 0:
 
-            packet = self._make_packet(src_br, source_offset)
+            packet = self._make_packet(src_br=src_br, source_offset=source_offset, payload_type=PayloadType.DATA)
             source_offset += len(src_br)
 
             # now calculate how many times do we write this packet and where in output it should go.
@@ -502,26 +522,36 @@ class RFUnarkiver(object):
             # if we haven't returned False we can say this.
             field4_source_offset = struct.unpack("!Q", possible_packet[40:48])[0]
             field5_source_fp = possible_packet[48:80]
-            field6_source_data = possible_packet[80:field2_len]
+            field6_payload_type = struct.unpack("!H", possible_packet[80: 82])[0]
+            field7_source_data = possible_packet[82:field2_len]
 
 
             # if cksum confirms this packet's identity save its data at the offset it indicates.
             if bytes(field3_cksum) == bytes(_get_hash(possible_packet[40:field2_len])):
 
+                if PayloadType.DATA == field6_payload_type:
+                    # use field5 to lazily get the correct file handle and save there.
+                    dest_filehandle = self._get_dest_file_handle(dest_fingerprint=field5_source_fp.encode('hex'))
+                    dest_filehandle.seek(field4_source_offset)
+                    dest_filehandle.write(field7_source_data)
 
-                # TODO dont save to outfile, use field5 to lazily get the correct file handle and save there.
-                dest_filehandle = self._get_dest_file_handle(dest_fingerprint=field5_source_fp.encode('hex'))
+                elif PayloadType.META == field6_payload_type:
+                    self._save_meta_info(dest_fingerprint=field5_source_fp.encode('hex'), metadata=field7_source_data)
 
-                dest_filehandle.seek(field4_source_offset)
-                dest_filehandle.write(field6_source_data)
+                    # if we wanted to do plots and shit this would be a good place to save the fact
+                    # that this block was successfully recovered. etc etc
 
-                # TODO save somewhere the fact that this chunk was successfully recovered. (for forensic mode)
-                # so we can do plots and shit
 
                 return field2_len
             else:
                 # hash failed
                 return -1
+
+    def _save_meta_info(self, dest_fingerprint, metadata):
+        """ Recored meta information about a rff arkive that is being extracted. (usually things like 
+        filenames are found here.) this fucntion will save it for later after recovery of content is complete
+        the unarkiver can look here to see if there is any metadata for that file and process that too. """
+        pass
 
 
 
