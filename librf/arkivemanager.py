@@ -9,6 +9,9 @@ import shutil
 
 _REPLICA_COUNT_DEFAULT = 4
 _REPLICA_COUNT_MIN = 2
+_BLOCK_SIZE_DEF = 512
+_BLOCK_SIZE_MIN = 256
+_BLOCK_SIZE_MAX = 60000
 
 def _debug_msg(msg):
 
@@ -29,89 +32,73 @@ def _get_hash(src_bytes):
     return hash_func.digest()
 
 
+class Layout(object):
+    """" Enumerate different physical layout managers that are exported by the module. """
+
+    DISTRIBUTED = 1
+    SEQUENTIAL = 2
+    RANDOM = 3
+
+
 
 class RFArkiver(object):
 
+    # -------------------------------------------------------- class variables:
     # 129 == 0x81
     # FLAG_BYTE = 129
-
     FLAG_SEQ = b'\x81\x81\x81\x81\x81\x81'
 
-    # class variables:
-    # presumably the user will set this to something like 512 or 4k as the device min block size
-    # we want this to be large enough such that the header overhead is about 10% or less, but not too large
-    # such that the packets fail to deliver forward progress.
-    # this should also never be set to less than 256 or even 512. higher than 4k is also not recommended,
-    # higher than 64k is disallowed (wont fit in the 2 byte len field)
-    MAX_PACKET_SIZE = 512
     HEADER_SIZE = 80
 
-    # 512 - 80 == 432
-    READ_SIZE = MAX_PACKET_SIZE - HEADER_SIZE
 
     # careful with argument defaults, they are evaluated once at function definition, not every time its called
     # good practice to avoid using mutable objects for argument defaults.
-    def __init__(self, src_filename, replica_count=None, progress_callback=None):
+    def __init__(self, replica_count=None, progress_callback=None, bs=None, layout=None):
+        """ Initialize a new RF arkiver creator with the given options. 
+        
+        args:
+        
+        progress_callback >> a function that will be called by this RF arkiver several times during its operation
+        to report a progress so far percentage. (useful for implementing a progress bar on the UI).
+        bs >> physical block size to use.
+        layout >> the choise of physical layout manager.
+        replica_count >> the number of times to replicate each block. 
+        """
 
         super(RFArkiver, self).__init__()
         self.progress_callback = progress_callback
 
-        if replica_count is None:
-            self.REPLICA_COUNT = _REPLICA_COUNT_DEFAULT
-        elif (int == type(replica_count) and replica_count >= _REPLICA_COUNT_MIN):
+        if replica_count and isinstance(replica_count, int) and (replica_count > _REPLICA_COUNT_MIN):
             self.REPLICA_COUNT = replica_count
         else:
-            raise ValueError('replica_count must be an int and >= ' + str(_REPLICA_COUNT_MIN))
+            self.REPLICA_COUNT = _REPLICA_COUNT_DEFAULT
+
 
         #_debug_msg("++++++++++ cwd: " + str(os.getcwd()))
 
-        # check if such a file exists or not. use these:
-        # os.path.isfile    returns true if a file (or link to file is there)
-        # os.path.isdir     returns true if a directory (or link to directory is there)
-        # os.path.exists    returns true if either file or directory exists (or sym links)
-        if os.path.isfile(src_filename):
-            self.src_filename = src_filename
+        # presumably the user will set this to something like 512 or 4k as the device min block size
+        # we want this to be large enough such that the header overhead is about 10% or less, but not too large
+        # such that the packets fail to deliver forward progress.
+        # this should also never be set to less than 256 or even 512. higher than 4k is also not recommended,
+        # higher than 64k is disallowed (wont fit in the 2 byte len field)
+
+        if bs and isinstance(bs, int) and (bs >= _BLOCK_SIZE_MIN) and (bs < _BLOCK_SIZE_MAX):
+            self.MAX_PACKET_SIZE = bs
         else:
-            raise ValueError('no such file with the supplied filename was found')
+            self.MAX_PACKET_SIZE = _BLOCK_SIZE_DEF
 
-        #  open the file and and save the handle in this object.
-        self.infile = open(self.src_filename, "rb")
 
-        # find src file size first.
-        self.infile.seek(0, os.SEEK_END)
-        infile_size = self.infile.tell()
-        self.infile.seek(0, os.SEEK_SET)
+        # example: 512 - 80 == 432
+        self.READ_SIZE = self.MAX_PACKET_SIZE - self.HEADER_SIZE
 
-        # compute the hash of the entire source file:
-        hash_func = hashlib.sha256()
-        chunk = bytes(self.infile.read(4096))
-        while len(chunk) > 0:
-            hash_func.update(chunk)
-            chunk = bytes(self.infile.read(4096))
-
-        self.src_fp = hash_func.digest()
-        print "the sha256 fingerprint of src file appears to be: " + str(self.src_fp.encode('hex'))
-
-        # reset seek location back to the beginning of the file
-        self.infile.seek(0, os.SEEK_SET)
-
-        _debug_msg("source file appears to be: " + str(infile_size) + " bytes")
-        infile_size_rounded_up = 0
-
-        if infile_size % self.READ_SIZE == 0:
-            infile_size_rounded_up = infile_size
+        # memorize the layout choice if it was valid.
+        if layout and layout in {Layout.DISTRIBUTED, Layout.SEQUENTIAL, Layout.RANDOM}:
+            self.layout_choice = layout
         else:
-            # // is unconditionally the integer division with truncate operator.
-            infile_size_rounded_up = ((infile_size // self.READ_SIZE) + 1) * self.READ_SIZE
+            self.layout_choice = Layout.DISTRIBUTED
 
-        #_debug_msg("source file after getting packet size aligned is: " + str(infile_size_rounded_up) + " bytes")
 
-        self.total_packet_count = infile_size_rounded_up // self.READ_SIZE
-        print("i believe i will need " + str(self.total_packet_count) + " packets. (not counting replication)")
 
-        self.layout_mgr = layoutmanager.SequentialInterleavedDistributedBeginningsLayoutManager(
-            frame_size=self.MAX_PACKET_SIZE, replica_count=self.REPLICA_COUNT,
-            total_page_count=self.total_packet_count, base_frame_num=0)
 
 
     def _make_packet(self, src_br, source_offset):
@@ -149,15 +136,74 @@ class RFArkiver(object):
         return bytes(packet_mutable)
 
 
-    def redundantize_and_save(self, out_filename=None):
+    def redundantize_and_save(self, src_filename, out_filename=None):
+        """ Given the pathname of src file and output file. make a redudant file from src and save it into output.
         """
-        """
+        # check if such a file exists or not. use these:
+        # os.path.isfile    returns true if a file (or link to file is there)
+        # os.path.isdir     returns true if a directory (or link to directory is there)
+        # os.path.exists    returns true if either file or directory exists (or sym links)
+        if os.path.isfile(src_filename):
+            self.src_filename = src_filename
+        else:
+            raise ValueError('No such file. you supplied src filepath: ' + str(src_filename))
+
+        # open the file and and save the handle in this object.
+        self.infile = open(self.src_filename, "rb")
+
+        # find src file size first.
+        self.infile.seek(0, os.SEEK_END)
+        infile_size = self.infile.tell()
+        self.infile.seek(0, os.SEEK_SET)
+
+        # compute the hash of the entire source file:
+        hash_func = hashlib.sha256()
+        chunk = bytes(self.infile.read(4096))
+        while len(chunk) > 0:
+            hash_func.update(chunk)
+            chunk = bytes(self.infile.read(4096))
+
+        self.src_fp = hash_func.digest()
+        _debug_msg("the sha256 fingerprint of src file appears to be: " + str(self.src_fp.encode('hex')))
+
+        # reset seek location back to the beginning of the file
+        self.infile.seek(0, os.SEEK_SET)
+
+        _debug_msg("source file appears to be: " + str(infile_size) + " bytes")
+        infile_size_rounded_up = 0
+
+        if infile_size % self.READ_SIZE == 0:
+            infile_size_rounded_up = infile_size
+        else:
+            # // is unconditionally the integer division with truncate operator.
+            infile_size_rounded_up = ((infile_size // self.READ_SIZE) + 1) * self.READ_SIZE
+
+        # _debug_msg("source file after getting packet size aligned is: " + str(infile_size_rounded_up) + " bytes")
+
+        self.total_packet_count = infile_size_rounded_up // self.READ_SIZE
+        print("i believe i will need " + str(self.total_packet_count) + " packets. (not counting replication)")
+
+        if Layout.SEQUENTIAL == self.layout_choice:
+            self.layout_mgr = layoutmanager.SequentialLayoutManager(frame_size=self.MAX_PACKET_SIZE,
+                replica_count=self.REPLICA_COUNT, total_page_count=self.total_packet_count, base_frame_num=0)
+
+        elif Layout.RANDOM == self.layout_choice:
+            self.layout_mgr = layoutmanager.RandomLayoutManager(frame_size=self.MAX_PACKET_SIZE,
+                replica_count=self.REPLICA_COUNT, total_page_count=self.total_packet_count, base_frame_num=0)
+
+        else:
+            self.layout_mgr = layoutmanager.SequentialInterleavedDistributedBeginningsLayoutManager(
+                frame_size=self.MAX_PACKET_SIZE, replica_count=self.REPLICA_COUNT,
+                total_page_count=self.total_packet_count, base_frame_num=0)
+
+
+
 
         if out_filename is None:
-            out_filename = str(self.src_filename) + ".redfile"
+            out_filename = str(self.src_filename) + ".rff"
 
         _debug_msg("--------------------------------------------------------------------------------------------------")
-        _debug_msg("creating redudant file. output file name: " + out_filename)
+        _debug_msg("creating redundant file. output file name: " + out_filename)
 
 
         # open in and out files for reading in binary modem and writing in binary mode
@@ -225,12 +271,13 @@ class RFArkiver(object):
 
         # done with the loop
         outfile.close()
+        self.infile.close()
 
 
 
 class RFUnarkiver(object):
 
-    def __init__(self, src_filename, progress_callback=None):
+    def __init__(self, progress_callback=None):
         """ Init a new Red File arkive extractor. Takes in the filepath of where a potentially heavily damaged
         red file is.
 
@@ -241,24 +288,7 @@ class RFUnarkiver(object):
         super(RFUnarkiver, self).__init__()
         self.progress_callback = progress_callback
 
-        # check if such a file exists or not. use these:
-        # os.path.isfile    returns true if a file (or link to file is there)
-        # os.path.isdir     returns true if a directory (or link to directory is there)
-        # os.path.exists    returns true if either file or directory exists (or sym links)
-        if os.path.isfile(src_filename):
-            self.src_filename = src_filename
-        else:
-            raise ValueError('no such file exists.')
 
-        # its possible that the file was on disk when the previous lines ran and no longer on disk now.
-        # TODO maybe the above check is unnecessary, i kept in case we want to handle directories differently.
-        self.infile = open(src_filename, "rb")
-
-        # find the size of src file.
-        self.infile.seek(0, os.SEEK_END)
-        self.src_size = self.infile.tell()
-        self.infile.seek(0, os.SEEK_SET)
-        #print ">> xtractor believes its src file is: " + str(self.src_size) + " many bytes"
 
     def _get_rand_name_with_size(self, size):
         """ Given positive int size, return a random name (file name/dir name) of len == size. """
@@ -296,9 +326,28 @@ class RFUnarkiver(object):
 
 
 
-    def recover_and_save(self, out_filename=None):
+    def recover_and_save(self, src_filename, out_filename=None):
         """ Try to recover the original data and save it to out_filename. """
 
+
+        # check if such a file exists or not. use these:
+        # os.path.isfile    returns true if a file (or link to file is there)
+        # os.path.isdir     returns true if a directory (or link to directory is there)
+        # os.path.exists    returns true if either file or directory exists (or sym links)
+        if os.path.isfile(src_filename):
+            self.src_filename = src_filename
+        else:
+            raise ValueError('no such file exists.')
+
+        # its possible that the file was on disk when the previous lines ran and no longer on disk now.
+        # TODO maybe the above check is unnecessary, i kept in case we want to handle directories differently.
+        self.infile = open(src_filename, "rb")
+
+        # find the size of src file.
+        self.infile.seek(0, os.SEEK_END)
+        self.src_size = self.infile.tell()
+        self.infile.seek(0, os.SEEK_SET)
+        #print ">> xtractor believes its src file is: " + str(self.src_size) + " many bytes"
 
         if out_filename is None:
             out_filename = str(self.src_filename) + ".recovered"
@@ -520,10 +569,10 @@ def debug_run1():
 
     for fname, count in files:
         fname_full = base_dir + fname
-        ra = RFArkiver(src_filename=fname_full, replica_count=count, progress_callback=_log_progress)
-        ra.redundantize_and_save()
-        ru = RFUnarkiver(src_filename=fname_full + ".redfile")
-        ru.recover_and_save()
+        ra = RFArkiver( replica_count=count, progress_callback=_log_progress)
+        ra.redundantize_and_save(src_filename=fname_full)
+        ru = RFUnarkiver()
+        ru.recover_and_save(src_filename=fname_full + ".redfile")
 
     # these are needed on windows to garbage collect last ra, ru right away
     # otherwise the last 2 files can't be deleted, because win fs api doesnt allow open files to be deleted (unix does)

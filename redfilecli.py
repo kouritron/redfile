@@ -49,8 +49,8 @@ def xtract_arkive(src_filename, out_filename):
     print "input file: " + str(src_filename)
     print "output file: " + str(out_filename)
 
-    xtractor = arkivemanager.RFUnarkiver(src_filename=src_filename, progress_callback=_progress_report_callback)
-    xtractor.recover_and_save(out_filename=out_filename)
+    xtractor = arkivemanager.RFUnarkiver( progress_callback=_progress_report_callback)
+    xtractor.recover_and_save(src_filename=src_filename, out_filename=out_filename)
 
 
 
@@ -60,10 +60,8 @@ def make_arkive(src_filename, out_filename, replica_count):
     print "input file: " + str(src_filename)
     print "output file: " + str(out_filename)
 
-    # TODO receive replica count from command line and pass in here (dont leave to default)
-    arkiver = arkivemanager.RFArkiver(src_filename=src_filename, replica_count=replica_count,
-                                        progress_callback=_progress_report_callback)
-    arkiver.redundantize_and_save(out_filename=out_filename)
+    arkiver = arkivemanager.RFArkiver(replica_count=replica_count, progress_callback=_progress_report_callback)
+    arkiver.redundantize_and_save(src_filename=src_filename, out_filename=out_filename)
 
 
 

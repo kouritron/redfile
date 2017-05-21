@@ -142,9 +142,8 @@ def _make_arkive(src_filename, out_filename, replica_count):
     print "replica count: " + str(replica_count)
 
     #
-    arkiver = arkivemanager.RFArkiver(src_filename=src_filename, replica_count=replica_count,
-                                      progress_callback=_progress_report_callback)
-    arkiver.redundantize_and_save(out_filename=out_filename)
+    arkiver = arkivemanager.RFArkiver(replica_count=replica_count, progress_callback=_progress_report_callback)
+    arkiver.redundantize_and_save(src_filename=src_filename, out_filename=out_filename)
 
     print "Done. librf arkiver returned."
 
@@ -155,8 +154,8 @@ def _xtract_arkive(src_filename, out_filename):
     print "input file: " + str(src_filename)
     print "output file: " + str(out_filename)
 
-    xtractor = arkivemanager.RFUnarkiver(src_filename=src_filename, progress_callback=_progress_report_callback)
-    xtractor.recover_and_save(out_filename=out_filename)
+    xtractor = arkivemanager.RFUnarkiver( progress_callback=_progress_report_callback)
+    xtractor.recover_and_save(src_filename=src_filename, out_filename=out_filename)
 
     print "Done. librf xtractor returned."
 
@@ -546,9 +545,9 @@ class RedFileGui(object):
 
         postfix = ''
         if self.last_action == Action.XTRACT:
-            postfix = '.redfile_recovered'
+            postfix = '.recovered'
         elif self.last_action == Action.CREATE:
-            postfix = '.redfile'
+            postfix = '.rff'
         else:
             print "no action is selected yet. wont try to cmd name output file atm."
             return

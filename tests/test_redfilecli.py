@@ -117,6 +117,14 @@ class TestRedFileCli(unittest.TestCase):
 
         pass
 
+    def test_mixed_arkives_xtracted_correctly(self):
+
+        pass
+
+    def test_rf_arkive_can_be_used_as_src_file_to_another_arkive_and_recovered(self):
+
+        pass
+
 
 
 if __name__ == '__main__':

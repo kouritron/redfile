@@ -14,7 +14,9 @@
 *.recovered
 *.redfile_recovered
 
-
+*.rff
+*.rff_recovered
+*.rff.recovered
 *.rf
 orig1.jpg
 orig.jpg
