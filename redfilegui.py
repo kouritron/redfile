@@ -115,11 +115,10 @@ def _worker_thread_entry():
 
             # UNPACK the job and call _make_arkive or _xtract_arkive
             if Action.CREATE == tmp_job.action:
-                _make_arkive(src_filename=tmp_job.src_filename, out_filename=tmp_job.out_filename,
-                             replica_count=tmp_job.replica_count)
+                _make_arkive(src_filename=tmp_job.src, out_filename=tmp_job.dest, replica_count=tmp_job.replica_count)
 
             elif Action.XTRACT == tmp_job.action:
-                _xtract_arkive(src_filename=tmp_job.src_filename, out_filename=tmp_job.out_filename)
+                _xtract_arkive(src_filename=tmp_job.src, out_directory=tmp_job.dest)
 
 
 
@@ -148,14 +147,14 @@ def _make_arkive(src_filename, out_filename, replica_count):
     print "Done. librf arkiver returned."
 
 
-def _xtract_arkive(src_filename, out_filename):
+def _xtract_arkive(src_filename, out_directory):
     print "------------------------------------------------------------------------------------------------------------"
     print "xtracting arkive, plz standby. "
     print "input file: " + str(src_filename)
-    print "output file: " + str(out_filename)
+    print "output folder: " + str(out_directory)
 
     xtractor = arkivemanager.RFUnarkiver( progress_callback=_progress_report_callback)
-    xtractor.recover_and_save(src_filename=src_filename, out_filename=out_filename)
+    xtractor.recover_and_save(src_filename=src_filename, out_directory=out_directory)
 
     print "Done. librf xtractor returned."
 
@@ -163,7 +162,7 @@ class RFJob(object):
     """" a struct (as close to it as possible in python) to keep track of a job. """
 
 
-    def __init__(self, action=None, src_filename=None, out_filename=None, replica_count=None,
+    def __init__(self, action=None, src=None, dest=None, replica_count=None,
                  physical_layout=None, block_size=None):
         super(RFJob, self).__init__()
 
@@ -171,8 +170,8 @@ class RFJob(object):
         assert (action == Action.CREATE) or (action == Action.XTRACT)
 
         self.action = action
-        self.src_filename = src_filename
-        self.out_filename = out_filename
+        self.src = src
+        self.dest = dest
         self.replica_count = replica_count
         self.physical_layout = physical_layout
         self.block_size = block_size
@@ -259,12 +258,14 @@ class RedFileGui(object):
         self.output_file_control_var = tkm.StringVar()
         self.autoname_checkbox_control_var = tkm.IntVar()
 
-        src_label = ttkm.Label(file_names_group, text='Source file')
+        src_label = ttkm.Label(file_names_group, text='Source file:')
         src_btn = ttkm.Button(file_names_group, text='Browse', command=self.browse_source_file_btn_clicked)
         src_entry = ttkm.Entry(file_names_group, textvariable=self.source_file_control_var, width=_ENTRY_BOX_DEFAULT_WIDTH)
 
+        self.output_label_control_var = tkm.StringVar()
+        self.output_label_control_var.set('Output:       ')
+        output_label = ttkm.Label(file_names_group, textvariable=self.output_label_control_var)
 
-        output_label = ttkm.Label(file_names_group, text='Output file')
         self.browse_output_filename_btn = ttkm.Button(file_names_group, text='Browse', command=self.browse_output_file_btn_clicked)
         autoname_checkbox = ttkm.Checkbutton(file_names_group, var=self.autoname_checkbox_control_var,
                                                 text='Auto name output', command=self.autoname_checkbox_clicked)
@@ -410,11 +411,13 @@ class RedFileGui(object):
             self.replica_count_spinbox.configure(state=tkm.DISABLED)
             self.phy_layout_combo.configure(state=tkm.DISABLED)
             self.block_size_combo.configure(state=tkm.DISABLED)
+            self.output_label_control_var.set('Output Folder:')
 
         elif selected_action == Action.CREATE:
             self.replica_count_spinbox.configure(state='readonly')
             self.phy_layout_combo.configure(state='readonly')
             self.block_size_combo.configure(state='readonly')
+            self.output_label_control_var.set('Output File:  ')
 
 
         if (selected_action == Action.XTRACT) and (selected_action != self.last_action):
@@ -438,7 +441,7 @@ class RedFileGui(object):
         global rf_mutex_next_job
         global rf_mutex_progress_pct
 
-        src_filename = self.source_file_control_var.get()
+        src = self.source_file_control_var.get()
 
         if None == self.last_action :
 
@@ -446,21 +449,14 @@ class RedFileGui(object):
             print "last action does not exist returning."
             return
 
-        if not os.path.isfile(src_filename):
+        if not os.path.isfile(src):
 
             print "src file does not exist returning."
             return
 
-        # now figure out the output filename
-        output_filename = self.output_file_control_var.get()
+        # now figure out the output filename/dirname
+        dest = self.output_file_control_var.get()
 
-        try:
-            output_test = open(output_filename, 'w')
-            output_test.close()
-            os.remove(output_filename)
-        except:
-            print 'failed to open output filename for writing. '
-            return
 
         if self.last_action == Action.CREATE:
 
@@ -480,27 +476,27 @@ class RedFileGui(object):
 
             print "adding job to make a new arkive plz standby"
             print "replica count is: " + str(rc)
-            print "src filename is: " + str(src_filename)
-            print "output filename is: " + str(output_filename)
+            print "src is: " + str(src)
+            print "dest is: " + str(dest)
             print "physical layout is: " + str(self.phy_layout_combo.get())
             print "block size is: " + str(self.block_size_combo.get())
             # _make_arkive(src_filename=src_filename, out_filename=output_filename, replica_count=rc)
 
             rf_mutex.acquire()
-            rf_mutex_next_job = RFJob(action=Action.CREATE, src_filename=src_filename, out_filename=output_filename,
-                                      replica_count=rc, block_size=block_size, physical_layout=phy_layout)
+            rf_mutex_next_job = RFJob(action=Action.CREATE, src=src, dest=dest, replica_count=rc,
+                                      block_size=block_size, physical_layout=phy_layout)
             rf_mutex_progress_pct = 0
             rf_mutex.release()
 
         elif self.last_action == Action.XTRACT:
 
             print "adding job to recover original data from arkive plz standby"
-            print "src filename is: " + str(src_filename)
-            print "output filename is: " + str(output_filename)
+            print "src filename is: " + str(src)
+            print "output filename is: " + str(dest)
             #_xtract_arkive(src_filename=src_filename, out_filename=output_filename)
 
             rf_mutex.acquire()
-            rf_mutex_next_job = RFJob(action=Action.XTRACT, src_filename=src_filename, out_filename=output_filename)
+            rf_mutex_next_job = RFJob(action=Action.XTRACT, src=src, dest=dest)
             rf_mutex_progress_pct = 0
             rf_mutex.release()
 
@@ -518,9 +514,18 @@ class RedFileGui(object):
             self._find_unused_output_name_if_possible()
 
     def browse_output_file_btn_clicked(self):
-        user_chosen_filename = tkFileDialog.asksaveasfilename()
-        print "user chosen output filename: " + str(user_chosen_filename)
-        self.output_file_control_var.set(user_chosen_filename)
+
+        user_chosen_path = None
+
+        if self.last_action == Action.CREATE:
+            user_chosen_path = tkFileDialog.asksaveasfilename()
+            print "user chosen output filename: " + str(user_chosen_path)
+
+        else:
+            user_chosen_path = tkFileDialog.askdirectory()
+            print "user chosen output directory: " + str(user_chosen_path)
+
+        self.output_file_control_var.set(user_chosen_path)
 
     def autoname_checkbox_clicked(self):
         """ """
@@ -543,31 +548,39 @@ class RedFileGui(object):
     def _find_unused_output_name_if_possible(self):
         """ Find an unused filename for output if possible and set the corresponding control variable. """
 
-        postfix = ''
         if self.last_action == Action.XTRACT:
-            postfix = '.recovered'
+            src_filename = self.source_file_control_var.get()
+            if not os.path.isfile(src_filename):
+                print "src path is not a file. cant generate output name for it."
+                return
+
+            src_directory = os.path.dirname(src_filename)
+            self.output_file_control_var.set(src_directory)
+            return
+
         elif self.last_action == Action.CREATE:
             postfix = '.rff'
-        else:
-            print "no action is selected yet. wont try to cmd name output file atm."
-            return
+            src_filename = self.source_file_control_var.get()
+            if not os.path.isfile(src_filename):
+                print "src path is not a file. cant generate output name for it."
+                return
 
-
-        src_filename = self.source_file_control_var.get()
-        if not os.path.isfile(src_filename):
-            print "src path is not a file. cant generate output name atm."
-            return
-
-        candidate_name = src_filename + postfix
-        if not os.path.isfile(candidate_name):
-            self.output_file_control_var.set(candidate_name)
-            return
-
-        for i in range(2, 100):
-            candidate_name = src_filename + '-' + str(i) + postfix
+            candidate_name = src_filename + postfix
             if not os.path.isfile(candidate_name):
                 self.output_file_control_var.set(candidate_name)
                 return
+
+            for i in range(2, 100):
+                candidate_name = src_filename + '-' + str(i) + postfix
+                if not os.path.isfile(candidate_name):
+                    self.output_file_control_var.set(candidate_name)
+                    return
+        else:
+            print "no action is selected yet. wont try to autoname anything atm."
+            return
+
+
+
 
 
 
