@@ -43,14 +43,14 @@ def _progress_report_callback(pct_complete=None):
         pass
 
 
-def xtract_arkive(src_filename, out_filename):
+def xtract_arkive(src_filename, out_directory):
     print "------------------------------------------------------------------------------------------------------------"
     print "xtracting arkive, plz standby. "
     print "input file: " + str(src_filename)
-    print "output file: " + str(out_filename)
+    print "output directory: " + str(out_directory)
 
     xtractor = arkivemanager.RFUnarkiver( progress_callback=_progress_report_callback)
-    xtractor.recover_and_save(src_filename=src_filename, out_filename=out_filename)
+    xtractor.recover_and_save(src_filename=src_filename, out_directory=out_directory)
 
 
 
@@ -79,8 +79,8 @@ def main(arguments):
     $ ./redfilecli -v or -h
     """
 
-    src_filename = ''
-    out_filename = ''
+    src = ''
+    dest = ''
     replica_count = 4
 
     # TODO enumerate this, op mode can be create arkive, extract arkive, and maybe a report or forensic mode, for now:
@@ -107,10 +107,10 @@ def main(arguments):
             sys.exit(0)
 
         if '-i' == option_key:
-            src_filename = option_val
+            src = option_val
 
         if '-o' == option_key:
-            out_filename = option_val
+            dest = option_val
 
         if '-r' == option_key:
             arg_int = None
@@ -145,10 +145,16 @@ def main(arguments):
             # now set the operation mode
             operation_mode = 2
 
+    # in case of xtract output is optional. if not supplied default to '.' (current directory)
+    if (2 == operation_mode) and ('' == dest):
+        dest = '.'
 
+    # in case of create if output is not supplied, make a name by appending .rff to src
+    if (1 == operation_mode) and ('' == dest):
+        dest = src + '.rff'
 
     # TODO ideally we have an enum set and we would set if operation_mode not in possible modes.
-    if ('' == src_filename) or ('' == out_filename) or (-1 == operation_mode):
+    if ('' == src) or ('' == dest) or (-1 == operation_mode):
         print usage_msg
         sys.exit(2)
 
@@ -161,9 +167,9 @@ def main(arguments):
     # maybe we should stop at max filename length allowed by any of any major filesystem (min of NTFS, EXT2, UFS, FAT??)
 
     if 1 == operation_mode:
-        make_arkive(src_filename=src_filename, out_filename=out_filename, replica_count=replica_count)
+        make_arkive(src_filename=src, out_filename=dest, replica_count=replica_count)
     elif 2 == operation_mode:
-        xtract_arkive(src_filename=src_filename, out_filename=out_filename)
+        xtract_arkive(src_filename=src, out_directory=dest)
 
 
 if __name__ == '__main__':

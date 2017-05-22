@@ -48,6 +48,8 @@ class PayloadType(object):
     # metadata packet. (can save things like file names here.)
     META = 1
 
+class RFError(Exception):
+    pass
 
 
 class RFArkiver(object):
@@ -200,7 +202,10 @@ class RFArkiver(object):
 
         # _debug_msg("source file after getting packet size aligned is: " + str(infile_size_rounded_up) + " bytes")
 
-        self.total_packet_count = infile_size_rounded_up // self.READ_SIZE
+        # at the moment we only add 1 meta packet containing filename.
+        meta_packet_count = 1
+
+        self.total_packet_count = (infile_size_rounded_up // self.READ_SIZE) + meta_packet_count
         print("i believe i will need " + str(self.total_packet_count) + " packets. (not counting replication)")
 
         if Layout.SEQUENTIAL == self.layout_choice:
@@ -222,7 +227,6 @@ class RFArkiver(object):
         if out_filename is None:
             out_filename = str(self.src_filename) + ".rff"
 
-        _debug_msg("--------------------------------------------------------------------------------------------------")
         _debug_msg("creating redundant file. output file name: " + out_filename)
 
 
@@ -238,7 +242,6 @@ class RFArkiver(object):
         src_br = bytearray(self.infile.read(self.READ_SIZE))
 
 
-        #while len(src_br) == self.READ_SIZE:
         while len(src_br) > 0:
 
             packet = self._make_packet(src_br=src_br, source_offset=source_offset, payload_type=PayloadType.DATA)
@@ -281,6 +284,30 @@ class RFArkiver(object):
 
                 self.progress_callback( pct_complete )
 
+        # now save the meta packet.
+        print "writing meta packet."
+        src_filename_no_parent_dirs = os.path.basename(src_filename)
+        meta_payload = src_filename_no_parent_dirs[:min(self.READ_SIZE, len(src_filename_no_parent_dirs))]
+        print "meta payload is: " + meta_payload
+
+        meta_packet = self._make_packet(src_br=meta_payload, source_offset=0, payload_type=PayloadType.META)
+        # now pad to a full size payload to make a full size packet.
+        if len(meta_packet) < self.MAX_PACKET_SIZE:
+            print("Found short packet. len: " + str(len(meta_packet)) + " I will pad this with 0s")
+            meta_packet_mutable = bytearray(meta_packet)
+            meta_packet_mutable.extend([0 for i in xrange(self.MAX_PACKET_SIZE - len(meta_packet))])
+            meta_packet = bytes(meta_packet_mutable)
+
+        print "meta packet size is: " + str(len(meta_packet))
+        #print "meta packet itself is:" + str(meta_packet)
+
+        meta_offsets = self.layout_mgr.get_page_to_bytes_mappings(curr_packet_id)
+
+        for i in range(len(meta_offsets)):
+            outfile.seek(meta_offsets[i])
+            outfile.write(meta_packet)
+
+
 
         outfile.flush()
 
@@ -308,45 +335,12 @@ class RFUnarkiver(object):
         super(RFUnarkiver, self).__init__()
         self.progress_callback = progress_callback
 
+        # dict of <key, 2-tuple> pairs where the 2-tuple is (file handle, filename)
+        self.outfiles = {}
 
+        self.meta_payloads = {}
 
-    def _get_rand_name_with_size(self, size):
-        """ Given positive int size, return a random name (file name/dir name) of len == size. """
-
-        charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-        charset_len = len(charset)
-        result = 'rftmp_'
-
-        for i in xrange(size):
-            rand_idx = int(random.random() * charset_len)
-            rand_char = charset[rand_idx:rand_idx + 1]
-            result += rand_char
-
-        return result
-
-    def _choose_temp_dir_name(self, out_filename):
-
-        # try to find a name with 6 random chars
-        for i in xrange(100):
-            temp_dir_name = self._get_rand_name_with_size(8)
-            temp_dir_path = os.path.join(self.base_dir, temp_dir_name)
-            # print "candidate for temp dir: " + temp_dir_path
-            if not os.path.exists(temp_dir_path):
-                print "found un-used name: "  + temp_dir_path
-                return temp_dir_path
-
-        # if that didnt work out, try to find a name with 16 random chars
-        for i in xrange(100):
-            temp_dir_name = self._get_rand_name_with_size(16)
-            temp_dir_path = os.path.join(self.base_dir, temp_dir_name)
-            # print "candidate for temp dir: " + temp_dir_path
-            if not os.path.exists(temp_dir_path):
-                print "found un-used name: "  + temp_dir_path
-                return temp_dir_path
-
-
-
-    def recover_and_save(self, src_filename, out_filename=None):
+    def recover_and_save(self, src_filename, out_directory=None):
         """ Try to recover the original data and save it to out_filename. """
 
 
@@ -369,29 +363,26 @@ class RFUnarkiver(object):
         self.infile.seek(0, os.SEEK_SET)
         #print ">> xtractor believes its src file is: " + str(self.src_size) + " many bytes"
 
-        if out_filename is None:
-            out_filename = str(self.src_filename) + ".recovered"
-
-
         # make a temp directory to put the recovered file(s) in.
-        self.base_dir = os.path.dirname(out_filename)
-        if '' == self.base_dir:
-            self.base_dir = '.'
-
-        print "choosing temp dir. out_filename: " + str(out_filename)
-        print "choosing temp dir. dir name is: " + str(self.base_dir)
-
-        self.rftmp_dir = self._choose_temp_dir_name(out_filename=out_filename)
-
-        # this could raise error if no perm to create directory among other things.
-        # TODO handle this for the GUI, for cmd line ui its fine to just let the error propagate.
-        os.makedirs(self.rftmp_dir)
-
-        self.outfiles = {}
 
         _debug_msg("--------------------------------------------------------------------------------------------------")
-        _debug_msg("recovering original file from red arkive. output filename: " + out_filename)
+        print "xtracting to out_directory: " + str(out_directory)
 
+        if None == out_directory or (not isinstance(out_directory, str)):
+            self.output_folder = '.'
+            print ">> no output directory supplied, i will default to: " + str(self.output_folder)
+
+        elif os.path.isdir(out_directory):
+            self.output_folder = out_directory
+            print ">> looks like output directory exists: " + str(out_directory)
+
+        else:
+            print ">> looks like i have to make the output directory: " + str(out_directory)
+            try:
+                os.makedirs(out_directory)
+                self.output_folder = out_directory
+            except:
+                raise RFError("Could not create output directory")
 
         potential_packet_start_offset = 0
         self.infile.seek(potential_packet_start_offset, os.SEEK_SET)
@@ -434,21 +425,25 @@ class RFUnarkiver(object):
         # if there is only one file handle in self.outfiles dict then move it out, rename it to what user gave us.
         # else rename the temp folder ___name user gave us_files___
 
-        num_files_found = len(self.outfiles)
-        for tmp_fname, tmp_fhandle in self.outfiles.items():
+        # self.outfiles is a dict of <fingerprints, 2-tuple> where the 2-tuple is file handle and filename.
+        for tmp_fhandle, tmp_fname in self.outfiles.values():
             tmp_fhandle.flush()
             tmp_fhandle.close()
 
         try:
-            if 1 == num_files_found:
-                # move the one file out from self.rftmp_dir to self.base_dir and del self.rftmp_dir
-                tmp_fname, tmp_fhandle = self.outfiles.items()[0]
-                shutil.move(src=os.path.join(self.rftmp_dir, tmp_fname),
-                            dst=os.path.join(self.base_dir, os.path.basename(out_filename)))
-                shutil.rmtree(path=self.rftmp_dir)
-            elif 1 < num_files_found:
-                # rename the folder whose path is in self.rftmp_dir
-                shutil.move(self.rftmp_dir, out_filename)
+            for hash_fp, (tmp_fhandle, tmp_fname) in self.outfiles.items():
+
+                if self.meta_payloads.has_key(hash_fp):
+                    print "++ Trying to rename file whose name is: " + str(tmp_fname)
+                    print "++ new name shall be: " + str(self.meta_payloads[hash_fp] + ".rff.recovered")
+                    old_fpath = os.path.join(self.output_folder, tmp_fname)
+                    new_fpath = os.path.join(self.output_folder, str(self.meta_payloads[hash_fp]) + ".rff.recovered")
+                    shutil.move(src=old_fpath, dst=new_fpath)
+                else:
+                    print "Could not rename file because no meta packet containing the original name was found."
+                    pass
+
+
 
         except OSError, e:
             print "Failed to perform clean up on the tmp directory."
@@ -470,15 +465,28 @@ class RFUnarkiver(object):
         # print "file handle requested for file with fp: " + dest_fingerprint
 
         if self.outfiles.has_key(dest_fingerprint):
-            return self.outfiles[dest_fingerprint]
+            return self.outfiles[dest_fingerprint][0]
 
         # lazily create the file handle, save it, and return it
-        print "lazily creating new outfile for this fp: " + dest_fingerprint
-        new_outfile_path = os.path.join(self.rftmp_dir, dest_fingerprint)
-        new_outfile = open( new_outfile_path , 'wb')
-        self.outfiles[dest_fingerprint] = new_outfile
+        print "** Extracting file from rff arkive whose fingerprint is: " + dest_fingerprint
 
-        return self.outfiles[dest_fingerprint]
+        # start with using the fingerprint as filename, if already exists concat _1 then _2 then _3 until un-used
+        # filename is found.
+
+        for i in range(0, 1000):
+
+            new_outfile_name = dest_fingerprint
+            if i > 0: new_outfile_name = new_outfile_name + '_' + str(i)
+
+            candidate_path = os.path.join(self.output_folder, new_outfile_name)
+
+            if not os.path.exists(candidate_path):
+                new_outfile_handle = open( candidate_path , 'wb')
+                self.outfiles[dest_fingerprint] = (new_outfile_handle, new_outfile_name)
+                print "** Came up w. this temp unused filename into the xtraction directory: " + str(new_outfile_name)
+                return new_outfile_handle
+
+        raise RFError("Can't choose an un-used file handle.")
 
 
 
@@ -525,18 +533,20 @@ class RFUnarkiver(object):
             field6_payload_type = struct.unpack("!H", possible_packet[80: 82])[0]
             field7_source_data = possible_packet[82:field2_len]
 
+            dest_fp = field5_source_fp.encode('hex')
+
 
             # if cksum confirms this packet's identity save its data at the offset it indicates.
             if bytes(field3_cksum) == bytes(_get_hash(possible_packet[40:field2_len])):
 
                 if PayloadType.DATA == field6_payload_type:
                     # use field5 to lazily get the correct file handle and save there.
-                    dest_filehandle = self._get_dest_file_handle(dest_fingerprint=field5_source_fp.encode('hex'))
+                    dest_filehandle = self._get_dest_file_handle(dest_fingerprint=dest_fp)
                     dest_filehandle.seek(field4_source_offset)
                     dest_filehandle.write(field7_source_data)
 
                 elif PayloadType.META == field6_payload_type:
-                    self._save_meta_info(dest_fingerprint=field5_source_fp.encode('hex'), metadata=field7_source_data)
+                    self._save_meta_info(dest_fingerprint=dest_fp, meta_payload=field7_source_data)
 
                     # if we wanted to do plots and shit this would be a good place to save the fact
                     # that this block was successfully recovered. etc etc
@@ -547,11 +557,17 @@ class RFUnarkiver(object):
                 # hash failed
                 return -1
 
-    def _save_meta_info(self, dest_fingerprint, metadata):
+    def _save_meta_info(self, dest_fingerprint, meta_payload):
         """ Recored meta information about a rff arkive that is being extracted. (usually things like 
         filenames are found here.) this fucntion will save it for later after recovery of content is complete
         the unarkiver can look here to see if there is any metadata for that file and process that too. """
-        pass
+
+        #print "++ found meta packet. dest_fp is: " + str(dest_fingerprint)
+        #print "meta payload is: " + str(meta_payload)
+
+        if not self.meta_payloads.has_key(dest_fingerprint):
+            self.meta_payloads[dest_fingerprint] = meta_payload
+
 
 
 
@@ -602,7 +618,7 @@ def debug_run1():
         ra = RFArkiver( replica_count=count, progress_callback=_log_progress)
         ra.redundantize_and_save(src_filename=fname_full)
         ru = RFUnarkiver()
-        ru.recover_and_save(src_filename=fname_full + ".redfile")
+        ru.recover_and_save(src_filename=fname_full + ".rff")
 
     # these are needed on windows to garbage collect last ra, ru right away
     # otherwise the last 2 files can't be deleted, because win fs api doesnt allow open files to be deleted (unix does)
@@ -610,8 +626,8 @@ def debug_run1():
     del ru
 
 
-    try_del_files_at_base(base_dir=base_dir, files=[f+'.redfile' for f, c in files])
-    try_del_files_at_base(base_dir=base_dir, files=[f+'.redfile.recovered' for f, c in files])
+    try_del_files_at_base(base_dir=base_dir, files=[f+'.rff' for f, c in files])
+    try_del_files_at_base(base_dir=base_dir, files=[f+'.rff.recovered' for f, c in files])
 
 
 if __name__ == '__main__':

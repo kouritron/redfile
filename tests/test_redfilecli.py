@@ -47,13 +47,14 @@ class TestRedFileCli(unittest.TestCase):
         files_to_remove = []
         for testfile in cls.testfiles:
             files_to_remove.append(testfile)
-            files_to_remove.append(testfile + '.redfile')
-            files_to_remove.append(testfile + '.redfile.recovered')
+            files_to_remove.append(testfile + '.rff')
+            files_to_remove.append(testfile + '.rff.recovered')
 
 
         for file in files_to_remove:
             try:
                 os.remove(file)
+                pass
             except OSError:
                 pass
 
@@ -70,7 +71,7 @@ class TestRedFileCli(unittest.TestCase):
 
     def test_non_damaged_random_files_recovered_correctly(self):
 
-        # run redfile cli to make .redfile
+        # run redfile cli to make .rff
         # run redfile cli to recover
         # check the recovered file hashes the same as original.
 
@@ -81,20 +82,20 @@ class TestRedFileCli(unittest.TestCase):
 
         # python redfilecli.py -c -i ./tests/sample_files/pic1.jpg -o ark1.rf
         for testfile in self.testfiles:
-            cmd = 'python ' + rfcli_path + ' -c -i ./' + testfile + ' -o ' + testfile + '.redfile'
-            print cmd
+            cmd = 'python ' + rfcli_path + ' -c -i ./' + testfile + ' -o ' + testfile + '.rff'
+            #print cmd
             subprocess.call(cmd, shell=True)
 
         # python redfilecli.py -x -i ark1.rf -o orig1.jpg
         for testfile in self.testfiles:
-            cmd = 'python ' + rfcli_path + ' -x -i ./' + testfile + '.redfile -o ' + testfile + '.redfile.recovered'
-            print cmd
+            cmd = 'python ' + rfcli_path + ' -x -i ./' + testfile + '.rff -o ./'
+            #print cmd
             subprocess.call(cmd, shell=True)
 
 
         for testfile in self.testfiles:
             original_fingerprint = get_file_hash(testfile)
-            recovered_fingerprint = get_file_hash(testfile + '.redfile.recovered')
+            recovered_fingerprint = get_file_hash(testfile + '.rff.recovered')
 
             self.assertEqual(original_fingerprint, recovered_fingerprint, 'Arkive did not recover correctly.')
 
