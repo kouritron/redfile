@@ -288,9 +288,9 @@ class RFArkiver(object):
         print "writing meta packet."
         src_filename_no_parent_dirs = os.path.basename(src_filename)
         meta_payload = src_filename_no_parent_dirs[:min(self.READ_SIZE, len(src_filename_no_parent_dirs))]
-        print "meta payload is: " + meta_payload
+        print "meta payload is: " + meta_payload + " type(meta_payload) is: " + str(type(meta_payload))
 
-        meta_packet = self._make_packet(src_br=meta_payload, source_offset=0, payload_type=PayloadType.META)
+        meta_packet = self._make_packet(src_br=bytes(meta_payload), source_offset=0, payload_type=PayloadType.META)
         # now pad to a full size payload to make a full size packet.
         if len(meta_packet) < self.MAX_PACKET_SIZE:
             print("Found short packet. len: " + str(len(meta_packet)) + " I will pad this with 0s")
@@ -366,11 +366,15 @@ class RFUnarkiver(object):
         # make a temp directory to put the recovered file(s) in.
 
         _debug_msg("--------------------------------------------------------------------------------------------------")
-        print "xtracting to out_directory: " + str(out_directory)
+        print "xtracting to out_directory: " + str(out_directory) + " type(out_directory): " + str(type(out_directory))
 
-        if None == out_directory or (not isinstance(out_directory, str)):
+        if None == out_directory:
             self.output_folder = '.'
             print ">> no output directory supplied, i will default to: " + str(self.output_folder)
+
+        elif (not isinstance(out_directory, str)) and (not isinstance(out_directory, unicode)):
+            self.output_folder = '.'
+            print ">> out_dir has unknown type. not str, not unicode. defaulting to ." + str(self.output_folder)
 
         elif os.path.isdir(out_directory):
             self.output_folder = out_directory
