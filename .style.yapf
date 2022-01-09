@@ -1,0 +1,31 @@
+# ----------------------------------------------------------- my notes:
+# If there is a section that yapf is messing up like
+# complex data literals, u can disable yapf for that section:
+# # yapf: disable
+# FOO = {
+#    # ... some large complex data literal ...
+# }
+# # yapf: enable
+# -----------------------------------------------------------
+
+[style]
+
+# will be format like this to indicate precedence:
+#     a = 1*2 + 3/4
+#     b = 1/2 - 3*4
+arithmetic_precedence_indication=True
+
+
+blank_lines_around_top_level_definition=2
+blank_line_before_module_docstring=True
+each_dict_entry_on_separate_line=True
+indent_blank_lines=False
+
+
+# important bit
+column_limit=140
+continuation_align_style=SPACE
+continuation_indent_width=4
+indent_width=4
+use_tabs=False
+
