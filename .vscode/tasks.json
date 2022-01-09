@@ -1,0 +1,22 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        // ---------------------------------------- local tasks (.vscode folder)
+        {
+            "label": "tsk_demo",
+            "type": "process",
+            "command": "python3",
+            "args": [
+                "${workspaceFolder}/.vscode/tsk_demo.py"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        // ---------------------------------------- 
+    ]
+}
